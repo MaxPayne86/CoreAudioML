@@ -67,7 +67,7 @@ class DataSet:
         assert type(data_dir) == str, "data_dir should be string,not %r" % {type(data_dir)}
         self.data_dir = data_dir
 
-    # add a subset called 'name', desired 'frame_len' is given in seconds, or 0 for just one long frame
+    # add a subset called 'name', desired 'frame_len' is given in samples, or 0 for just one long frame
     def create_subset(self, name, frame_len=0):
         assert type(name) == str, "data subset name must be a string, not %r" %{type(name)}
         assert not (name in self.subsets), "subset %r already exists" %name
@@ -99,6 +99,7 @@ class DataSet:
             raw_audio = audio_converter(np_data[1])
             # Split the audio if the set_names were provided
             if len(set_names) > 1:
+                print("AAAA splits=%d" % splits)
                 raw_audio = audio_splitter(raw_audio, splits)
                 for n, sets in enumerate(set_names):
                     self.subsets[set_names[n]].add_data(np_data[0], raw_audio[n], ext, cond_val)
@@ -107,7 +108,7 @@ class DataSet:
 
 
 # The SubSet class holds a subset of data,
-# frame_len sets the length of audio per frame (in s), if set to 0 a single frame is used instead
+# frame_len sets the length of audio per frame (in samples), if set to 0 a single frame is used instead
 class SubSet:
     def __init__(self, frame_len):
         self.data = {}
