@@ -28,7 +28,7 @@ class SimpleRNN(nn.Module):
         self.hidden = None
 
     def forward(self, x):
-        if self.skip:
+        if self.skip > 0:
             # save the residual for the skip connection
             res = x[:, :, 0:self.skip]
             x, self.hidden = self.rec(x, self.hidden)
@@ -297,11 +297,11 @@ class RecNet(nn.Module):
 
     # Define forward pass
     def forward(self, x):
-        if not self.skip:
-            return self.layers(x)
-        else:
+        if self.skip > 0:
             res = x[:, :, 0:self.skip]
             return self.layers(x) + res
+        else:
+            return self.layers(x)
 
     # Set hidden state to specified values, resets gradient tracking
     def detach_hidden(self):
@@ -365,7 +365,7 @@ class BasicRNNBlock(nn.Module):
             self.skip = 1
 
     def forward(self, x):
-        if self.skip:
+        if self.skip > 0:
             # save the residual for the skip connection
             res = x[:, :, 0:self.skip]
             x, self.hidden = self.rec(x, self.hidden)
