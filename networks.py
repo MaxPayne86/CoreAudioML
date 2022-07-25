@@ -10,8 +10,11 @@ def wrapperkwargs(func, kwargs):
 def wrapperargs(func, args):
     return func(*args)
 
-# A simple RNN class that consists of a single recurrent unit of type LSTM, GRU or Elman, followed by a fully connected
-# layer
+"""
+A simple RNN class that consists of a single recurrent unit of type LSTM, GRU or Elman, followed by a fully connected
+layer
+"""
+
 
 class SimpleRNN(nn.Module):
     def __init__(self, input_size=1, output_size=1, unit_type="LSTM", hidden_size=32, skip=1, bias_fl=True,
