@@ -99,7 +99,6 @@ class DataSet:
             raw_audio = audio_converter(np_data[1])
             # Split the audio if the set_names were provided
             if len(set_names) > 1:
-                print("AAAA splits=%d" % splits)
                 raw_audio = audio_splitter(raw_audio, splits)
                 for n, sets in enumerate(set_names):
                     self.subsets[set_names[n]].add_data(np_data[0], raw_audio[n], ext, cond_val)
