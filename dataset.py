@@ -18,18 +18,23 @@ def audio_converter(audio):
 
 # Splits audio, each split marker determines the fraction of the total audio in that split, i.e [0.75, 0.25] will put
 # 75% in the first split and 25% in the second
-def audio_splitter(audio, split_markers):
-    assert sum(split_markers) <= 1.0
-    if sum(split_markers) < 0.999:
-        warnings.warn("sum of split markers is less than 1, so not all audio will be included in dataset")
-    start = 0
+def audio_splitter(audio, split_markers, unit='%'):
     slices = []
-    # convert split markers to samples
-    split_bounds = [int(x * audio.shape[0]) for x in split_markers]
-    for n in split_bounds:
-        end = start + n
-        slices.append(audio[start:end])
-        start = end
+    if unit == '%':
+        assert sum(split_markers) <= 1.0
+        if sum(split_markers) < 0.999:
+            warnings.warn("sum of split markers is less than 1, so not all audio will be included in dataset")
+        split_bounds = [int(x * audio.shape[0]) for x in split_markers] # convert split markers to samples
+        start = 0
+        for n in split_bounds:
+            end = start + n
+            slices.append(audio[start:end])
+            start = end
+    elif unit == 's':
+        split_bounds = split_markers
+        assert len(split_bounds) == 6
+        for i in range(0,6,2):
+            slices.append(audio[split_bounds[i]:split_bounds[i+1]])
     return slices
 
 
