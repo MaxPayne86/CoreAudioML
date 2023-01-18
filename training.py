@@ -7,11 +7,23 @@ class ESRLoss(nn.Module):
         super(ESRLoss, self).__init__()
         self.epsilon = 0.00001
 
-    def forward(self, output, target):
+    def forward(self, output, target, pooling=False, scale_factor=0.01):
         loss = torch.add(target, -output)
         loss = torch.pow(loss, 2)
-        loss = torch.mean(loss)
-        energy = torch.mean(torch.pow(target, 2)) + self.epsilon
+        if pooling is False:
+            loss = torch.mean(loss)
+            energy = torch.mean(torch.pow(target, 2)) + self.epsilon
+        else:
+            size = int(list(loss.size())[0])
+            pooling_size = int(size * scale_factor)
+            # Apply 1D pooling and then interpolate to match the size
+            m = nn.AdaptiveAvgPool1d(pooling_size)
+            loss = torch.permute(loss, (2, 1, 0))
+            out = m(loss)
+            loss = nn.functional.interpolate(out, size, mode='linear', align_corners=False)
+            loss = torch.permute(loss, (2, 1, 0))
+            energy = torch.mean(torch.pow(target, 2)) + self.epsilon
+
         loss = torch.div(loss, energy)
         return loss
 
