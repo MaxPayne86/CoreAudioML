@@ -32,8 +32,8 @@ def audio_splitter(audio, split_markers, unit='%'):
             start = end
     elif unit == 's':
         split_bounds = split_markers
-        assert len(split_bounds) == 6
-        for i in range(0,6,2):
+        assert len(split_bounds) % 2 == 0
+        for i in range(0,len(split_bounds),2):
             slices.append(audio[split_bounds[i]:split_bounds[i+1]])
     return slices
 
