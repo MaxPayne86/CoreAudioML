@@ -31,15 +31,23 @@ class SimpleRNN(nn.Module):
         self.save_state = True
         self.hidden = None
 
-    def forward(self, x):
+    def forward(self, x, hidden=None):
         if self.skip > 0:
             # save the residual for the skip connection
             res = x[:, :, 0:self.skip]
-            x, self.hidden = self.rec(x, self.hidden)
-            return self.lin(x) + res
+            if(hidden):
+                x, self.hidden = self.rec(x, hidden)
+                return ((self.lin(x) + res), self.hidden)
+            else:
+                x, self.hidden = self.rec(x, self.hidden)
+                return self.lin(x) + res
         else:
-            x, self.hidden = self.rec(x, self.hidden)
-            return self.lin(x)
+            if(hidden):
+                x, self.hidden = self.rec(x, hidden)
+                return (self.lin(x), self.hidden)
+            else:
+                x, self.hidden = self.rec(x, self.hidden)
+                return self.lin(x)
 
     # detach hidden state, this resets gradient tracking on the hidden state
     def detach_hidden(self):
