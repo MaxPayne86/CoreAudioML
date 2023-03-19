@@ -76,6 +76,7 @@ class SimpleRNN(nn.Module):
             model_data['state_dict'] = model_state
 
         miscfuncs.json_save(model_data, file_name, direc)
+        torch.save(self.state_dict(), direc +'/'+ file_name + ".pt")
 
     # train_epoch runs one epoch of training
     def train_epoch(self, input_data, target_data, loss_fcn, optim, bs, init_len=200, up_fr=1000):
