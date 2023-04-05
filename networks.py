@@ -72,7 +72,7 @@ class SimpleRNN(nn.Module):
         if self.save_state:
             model_state = self.state_dict()
             for each in model_state:
-                model_state[each] = model_state[each].tolist()
+                model_state[each] = model_state[each].cpu().data.numpy().tolist()
             model_data['state_dict'] = model_state
 
         miscfuncs.json_save(model_data, file_name, direc)
@@ -120,7 +120,7 @@ class SimpleRNN(nn.Module):
             self.reset_hidden()
         return ep_loss / (batch_i + 1)
 
-    # only proc processes a the input data and calculates the loss, optionally grad can be tracked or not
+    # Only proc processes a the input data and calculates the loss, optionally grad can be tracked or not
     def process_data(self, input_data, target_data, loss_fcn, chunk, grad=False):
         with (torch.no_grad() if not grad else nullcontext()):
             output = torch.empty_like(target_data)
