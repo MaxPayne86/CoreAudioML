@@ -127,9 +127,9 @@ class SimpleRNN(nn.Module):
             for l in range(int(output.size()[0] / chunk)):
                 output[l * chunk:(l + 1) * chunk] = self(input_data[l * chunk:(l + 1) * chunk])
                 self.detach_hidden()
-            # If the data set doesn't divide evenly into the chunk length, process the remainder
-            if not (output.size()[0] / chunk).is_integer():
-                output[(l + 1) * chunk:-1] = self(input_data[(l + 1) * chunk:-1])
+                # If the data set doesn't divide evenly into the chunk length, process the remainder
+                if not (output.size()[0] / chunk).is_integer():
+                    output[(l + 1) * chunk:-1] = self(input_data[(l + 1) * chunk:-1])
             self.reset_hidden()
             loss = loss_fcn(output, target_data)
         return output, loss
