@@ -12,6 +12,360 @@ def wrapperargs(func, args):
 
 
 """
+A simple asymmetric advanced clip unit (tanh)
+
+Reference: https://wiki.analog.com/resources/tools-software/sigmastudio/toolbox/nonlinearprocessors/asymmetricsoftclipper
+
+Implemented by Massimo Pennazio Aida DSP maxipenna@libero.it 2023 All Rights Reserved
+
+0.1 < tau1 < 0.9
+0.1 < tau2 < 0.9
+
+if In > 0:
+    if In < tau1:
+        Out = In
+    else:
+        Out = tau1 + (1 - tau1) * tanh( (abs(In) - tau1) / (1 - tau1) )
+else:
+    if In < tau2:
+        Out = In
+    else:
+        Out = -tau2 - (1 - tau2) * tanh( (abs(In) - tau2) / (1 - tau2) )
+
+"""
+
+class AsymmetricAdvancedClip(nn.Module):
+    def __init__(self, size_in=1, size_out=1):
+        super().__init__()
+        self.size_in, self.size_out = size_in, size_out
+        bias = torch.Tensor(2)
+        self.bias = nn.Parameter(bias)
+        self.tau_min = 0.1
+        self.tau_max = 0.9
+
+        nn.init.uniform_(self.bias, self.tau_min, self.tau_max)  # Bias init
+
+    def forward(self, x):
+        tau1 = self.bias.data.clamp(self.tau_min, self.tau_max)[0]
+        tau2 = self.bias.data.clamp(self.tau_min, self.tau_max)[1]
+
+        theta2 = torch.div(torch.sub(torch.abs(x), tau2), torch.sub(1, tau2))
+
+        gt_zero = torch.gt(x, 0).type(x.type())
+        le_zero = torch.le(x, 0).type(x.type())
+        gt_zero_out = torch.mul(gt_zero, x)
+        le_zero_out = torch.mul(le_zero, x)
+
+        lt_tau1 = torch.lt(gt_zero_out, tau1).type(x.type())
+        ge_tau1 = torch.ge(gt_zero_out, tau1).type(x.type())
+        lt_tau1_out = torch.mul(lt_tau1, gt_zero_out)
+        ge_tau1_out = torch.mul(ge_tau1, gt_zero_out)
+        theta1 = torch.div(torch.sub(torch.abs(ge_tau1_out), tau1), torch.sub(1, tau1))
+        f_ge_tau1_out = torch.add(tau1, torch.mul(torch.sub(1, tau2), torch.tanh(theta1)))
+        gt_zero_block_out = torch.add(lt_tau1_out, f_ge_tau1_out)
+
+        lt_tau2 = torch.lt(le_zero_out, tau2).type(x.type())
+        ge_tau2 = torch.ge(le_zero_out, tau2).type(x.type())
+        lt_tau2_out = torch.mul(lt_tau2, le_zero_out)
+        ge_tau2_out = torch.mul(ge_tau2, le_zero_out)
+        theta2 = torch.div(torch.sub(torch.abs(ge_tau2_out), tau2), torch.sub(1, tau2))
+        f_ge_tau2_out = torch.sub(torch.mul(tau2, -1), torch.mul(torch.sub(1, tau2), torch.tanh(theta2)))
+        le_zero_block_out = torch.add(lt_tau2_out, f_ge_tau2_out)
+
+        out = torch.add(gt_zero_block_out, le_zero_block_out)
+        return out
+
+
+"""
+A simple advanced clip unit (tanh)
+
+Reference: https://wiki.analog.com/resources/tools-software/sigmastudio/toolbox/nonlinearprocessors/advancedclip
+
+Implemented by Massimo Pennazio Aida DSP maxipenna@libero.it 2023 All Rights Reserved
+
+0.1 < threshold < 0.9
+theta = (abs(In) - threshold) / (1 - threshold))
+if In < threshold:
+   Out = In
+ else
+   Out = (In * threshold + (1 - threshold) * tanh(theta))
+
+"""
+
+class AdvancedClip(nn.Module):
+    def __init__(self, size_in=1, size_out=1):
+        super().__init__()
+        self.size_in, self.size_out = size_in, size_out
+        bias = torch.Tensor(1)
+        self.bias = nn.Parameter(bias)
+        self.thr_min = 0.1
+        self.thr_max = 0.9
+
+        nn.init.uniform_(self.bias, self.thr_min, self.thr_max)  # Bias init
+
+    def forward(self, x):
+        thr = self.bias.data.clamp(self.thr_min, self.thr_max)
+        theta = torch.div(torch.sub(torch.abs(x), thr), torch.sub(1, thr))
+        sub_thr = torch.lt(x, thr).type(x.type())
+        sub_thr_out = torch.mul(sub_thr, x)
+        over_thr = torch.ge(x, thr).type(x.type())
+        f_out = torch.add(torch.mul(x, thr), torch.mul(torch.sub(1, thr), torch.tanh(theta)))
+        over_thr_out = torch.mul(over_thr, f_out)
+        out = torch.add(sub_thr_out, over_thr_out)
+        return out
+
+
+"""
+A simple AdvancedClip RNN class that consists of an asymmetric anvanced clip unit in front of a single recurrent unit of type LSTM, GRU or Elman, followed by a fully connected
+layer
+"""
+
+
+class AsymmetricAdvancedClipSimpleRNN(nn.Module):
+    def __init__(self, input_size=1, output_size=1, unit_type="LSTM", hidden_size=32, skip=1, bias_fl=True,
+                 num_layers=1):
+        super(AsymmetricAdvancedClipSimpleRNN, self).__init__()
+        self.input_size = input_size
+        self.output_size = output_size
+        # Create dictionary of possible block types
+        self.clip = AsymmetricAdvancedClip(1, 1)
+        self.rec = wrapperargs(getattr(nn, unit_type), [input_size, hidden_size, num_layers])
+        self.lin = nn.Linear(hidden_size, output_size, bias=True)
+        self.bias_fl = bias_fl
+        self.skip = skip
+        self.save_state = True
+        self.hidden = None
+
+    def forward(self, x, hidden=None):
+        x = self.clip(x)
+        if self.skip > 0:
+            # save the residual for the skip connection
+            res = x[:, :, 0:self.skip]
+            if(hidden):
+                x, self.hidden = self.rec(x, hidden)
+                return ((self.lin(x) + res), self.hidden)
+            else:
+                x, self.hidden = self.rec(x, self.hidden)
+                return self.lin(x) + res
+        else:
+            if(hidden):
+                x, self.hidden = self.rec(x, hidden)
+                return (self.lin(x), self.hidden)
+            else:
+                x, self.hidden = self.rec(x, self.hidden)
+                return self.lin(x)
+
+    # detach hidden state, this resets gradient tracking on the hidden state
+    def detach_hidden(self):
+        if self.hidden.__class__ == tuple:
+            self.hidden = tuple([h.clone().detach() for h in self.hidden])
+        else:
+            self.hidden = self.hidden.clone().detach()
+
+    # changes the hidden state to None, causing pytorch to create an all-zero hidden state when the rec unit is called
+    def reset_hidden(self):
+        self.hidden = None
+
+    # This functions saves the model and all its paraemters to a json file, so it can be loaded by a JUCE plugin
+    def save_model(self, file_name, direc=''):
+        if direc:
+            miscfuncs.dir_check(direc)
+        model_data = {'model_data': {'model': 'AsymmetricAdvancedClipSimpleRNN', 'input_size': self.rec.input_size, 'skip': self.skip,
+                                     'output_size': self.lin.out_features, 'unit_type': self.rec._get_name(),
+                                     'num_layers': self.rec.num_layers, 'hidden_size': self.rec.hidden_size,
+                                     'bias_fl': self.bias_fl}}
+
+        if self.save_state:
+            model_state = self.state_dict()
+            for each in model_state:
+                model_state[each] = model_state[each].cpu().data.numpy().tolist()
+            model_data['state_dict'] = model_state
+
+        miscfuncs.json_save(model_data, file_name, direc)
+
+    # train_epoch runs one epoch of training
+    def train_epoch(self, input_data, target_data, loss_fcn, optim, bs, init_len=200, up_fr=1000):
+        # shuffle the segments at the start of the epoch
+        shuffle = torch.randperm(input_data.shape[1])
+
+        # Iterate over the batches
+        ep_loss = 0
+        for batch_i in range(math.ceil(shuffle.shape[0] / bs)):
+            # Load batch of shuffled segments
+            input_batch = input_data[:, shuffle[batch_i * bs:(batch_i + 1) * bs], :]
+            target_batch = target_data[:, shuffle[batch_i * bs:(batch_i + 1) * bs], :]
+
+            # Initialise network hidden state by processing some samples then zero the gradient buffers
+            self(input_batch[0:init_len, :, :])
+            self.zero_grad()
+
+            # Choose the starting index for processing the rest of the batch sequence, in chunks of args.up_fr
+            start_i = init_len
+            batch_loss = 0
+            # Iterate over the remaining samples in the mini batch
+            for k in range(math.ceil((input_batch.shape[0] - init_len) / up_fr)):
+                # Process input batch with neural network
+                output = self(input_batch[start_i:start_i + up_fr, :, :])
+
+                # Calculate loss and update network parameters
+                loss = loss_fcn(output, target_batch[start_i:start_i + up_fr, :, :])
+                loss.backward()
+                optim.step()
+
+                # Set the network hidden state, to detach it from the computation graph
+                self.detach_hidden()
+                self.zero_grad()
+
+                # Update the start index for the next iteration and add the loss to the batch_loss total
+                start_i += up_fr
+                batch_loss += loss
+
+            # Add the average batch loss to the epoch loss and reset the hidden states to zeros
+            ep_loss += batch_loss / (k + 1)
+            self.reset_hidden()
+        return ep_loss / (batch_i + 1)
+
+    # Only proc processes a the input data and calculates the loss, optionally grad can be tracked or not
+    def process_data(self, input_data, target_data, loss_fcn, chunk, grad=False):
+        with (torch.no_grad() if not grad else nullcontext()):
+            output = torch.empty_like(target_data)
+            for l in range(int(output.size()[0] / chunk)):
+                output[l * chunk:(l + 1) * chunk] = self(input_data[l * chunk:(l + 1) * chunk])
+                self.detach_hidden()
+            # If the data set doesn't divide evenly into the chunk length, process the remainder
+            if not (output.size()[0] / chunk).is_integer():
+                output[(l + 1) * chunk:-1] = self(input_data[(l + 1) * chunk:-1])
+            self.reset_hidden()
+            loss = loss_fcn(output, target_data)
+        return output, loss
+
+
+"""
+A simple AdvancedClip RNN class that consists of an anvanced clip unit in front of a single recurrent unit of type LSTM, GRU or Elman, followed by a fully connected
+layer
+"""
+
+
+class AdvancedClipSimpleRNN(nn.Module):
+    def __init__(self, input_size=1, output_size=1, unit_type="LSTM", hidden_size=32, skip=1, bias_fl=True,
+                 num_layers=1):
+        super(AdvancedClipSimpleRNN, self).__init__()
+        self.input_size = input_size
+        self.output_size = output_size
+        # Create dictionary of possible block types
+        self.clip = AdvancedClip(1, 1)
+        self.rec = wrapperargs(getattr(nn, unit_type), [input_size, hidden_size, num_layers])
+        self.lin = nn.Linear(hidden_size, output_size, bias=True)
+        self.bias_fl = bias_fl
+        self.skip = skip
+        self.save_state = True
+        self.hidden = None
+
+    def forward(self, x, hidden=None):
+        x = self.clip(x)
+        if self.skip > 0:
+            # save the residual for the skip connection
+            res = x[:, :, 0:self.skip]
+            if(hidden):
+                x, self.hidden = self.rec(x, hidden)
+                return ((self.lin(x) + res), self.hidden)
+            else:
+                x, self.hidden = self.rec(x, self.hidden)
+                return self.lin(x) + res
+        else:
+            if(hidden):
+                x, self.hidden = self.rec(x, hidden)
+                return (self.lin(x), self.hidden)
+            else:
+                x, self.hidden = self.rec(x, self.hidden)
+                return self.lin(x)
+
+    # detach hidden state, this resets gradient tracking on the hidden state
+    def detach_hidden(self):
+        if self.hidden.__class__ == tuple:
+            self.hidden = tuple([h.clone().detach() for h in self.hidden])
+        else:
+            self.hidden = self.hidden.clone().detach()
+
+    # changes the hidden state to None, causing pytorch to create an all-zero hidden state when the rec unit is called
+    def reset_hidden(self):
+        self.hidden = None
+
+    # This functions saves the model and all its paraemters to a json file, so it can be loaded by a JUCE plugin
+    def save_model(self, file_name, direc=''):
+        if direc:
+            miscfuncs.dir_check(direc)
+        model_data = {'model_data': {'model': 'AdvancedClipSimpleRNN', 'input_size': self.rec.input_size, 'skip': self.skip,
+                                     'output_size': self.lin.out_features, 'unit_type': self.rec._get_name(),
+                                     'num_layers': self.rec.num_layers, 'hidden_size': self.rec.hidden_size,
+                                     'bias_fl': self.bias_fl}}
+
+        if self.save_state:
+            model_state = self.state_dict()
+            for each in model_state:
+                model_state[each] = model_state[each].cpu().data.numpy().tolist()
+            model_data['state_dict'] = model_state
+
+        miscfuncs.json_save(model_data, file_name, direc)
+
+    # train_epoch runs one epoch of training
+    def train_epoch(self, input_data, target_data, loss_fcn, optim, bs, init_len=200, up_fr=1000):
+        # shuffle the segments at the start of the epoch
+        shuffle = torch.randperm(input_data.shape[1])
+
+        # Iterate over the batches
+        ep_loss = 0
+        for batch_i in range(math.ceil(shuffle.shape[0] / bs)):
+            # Load batch of shuffled segments
+            input_batch = input_data[:, shuffle[batch_i * bs:(batch_i + 1) * bs], :]
+            target_batch = target_data[:, shuffle[batch_i * bs:(batch_i + 1) * bs], :]
+
+            # Initialise network hidden state by processing some samples then zero the gradient buffers
+            self(input_batch[0:init_len, :, :])
+            self.zero_grad()
+
+            # Choose the starting index for processing the rest of the batch sequence, in chunks of args.up_fr
+            start_i = init_len
+            batch_loss = 0
+            # Iterate over the remaining samples in the mini batch
+            for k in range(math.ceil((input_batch.shape[0] - init_len) / up_fr)):
+                # Process input batch with neural network
+                output = self(input_batch[start_i:start_i + up_fr, :, :])
+
+                # Calculate loss and update network parameters
+                loss = loss_fcn(output, target_batch[start_i:start_i + up_fr, :, :])
+                loss.backward()
+                optim.step()
+
+                # Set the network hidden state, to detach it from the computation graph
+                self.detach_hidden()
+                self.zero_grad()
+
+                # Update the start index for the next iteration and add the loss to the batch_loss total
+                start_i += up_fr
+                batch_loss += loss
+
+            # Add the average batch loss to the epoch loss and reset the hidden states to zeros
+            ep_loss += batch_loss / (k + 1)
+            self.reset_hidden()
+        return ep_loss / (batch_i + 1)
+
+    # Only proc processes a the input data and calculates the loss, optionally grad can be tracked or not
+    def process_data(self, input_data, target_data, loss_fcn, chunk, grad=False):
+        with (torch.no_grad() if not grad else nullcontext()):
+            output = torch.empty_like(target_data)
+            for l in range(int(output.size()[0] / chunk)):
+                output[l * chunk:(l + 1) * chunk] = self(input_data[l * chunk:(l + 1) * chunk])
+                self.detach_hidden()
+            # If the data set doesn't divide evenly into the chunk length, process the remainder
+            if not (output.size()[0] / chunk).is_integer():
+                output[(l + 1) * chunk:-1] = self(input_data[(l + 1) * chunk:-1])
+            self.reset_hidden()
+            loss = loss_fcn(output, target_data)
+        return output, loss
+
+
+"""
 A simple RNN class that consists of a single recurrent unit of type LSTM, GRU or Elman, followed by a fully connected
 layer
 """
@@ -399,11 +753,19 @@ class BasicRNNBlock(nn.Module):
 
 
 def load_model(model_data):
-    model_types = {'RecNet': RecNet, 'SimpleRNN': SimpleRNN, 'GatedConvNet': GatedConvNet}
+    model_types = {'RecNet': RecNet, 'SimpleRNN': SimpleRNN, 'GatedConvNet': GatedConvNet, 'AdvancedClipSimpleRNN': AdvancedClipSimpleRNN, 'AsymmetricAdvancedClipSimpleRNN': AsymmetricAdvancedClipSimpleRNN}
 
     model_meta = model_data.pop('model_data')
 
     if model_meta['model'] == 'SimpleRNN' or model_meta['model'] == 'GatedConvNet':
+        network = wrapperkwargs(model_types[model_meta.pop('model')], model_meta)
+        if 'state_dict' in model_data:
+            state_dict = network.state_dict()
+            for each in model_data['state_dict']:
+                state_dict[each] = torch.tensor(model_data['state_dict'][each])
+            network.load_state_dict(state_dict)
+
+    elif model_meta['model'] == 'AdvancedClipSimpleRNN' or model_meta['model'] == 'AsymmetricAdvancedClipSimpleRNN':
         network = wrapperkwargs(model_types[model_meta.pop('model')], model_meta)
         if 'state_dict' in model_data:
             state_dict = network.state_dict()
