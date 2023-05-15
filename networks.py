@@ -122,7 +122,7 @@ layer
 
 
 class AsymmetricAdvancedClipSimpleRNN(nn.Module):
-    def __init__(self, input_size=1, output_size=1, unit_type="LSTM", hidden_size=32, skip=1, bias_fl=True,
+    def __init__(self, input_size=1, output_size=1, unit_type="GRU", hidden_size=12, skip=0, bias_fl=True,
                  num_layers=1):
         super(AsymmetricAdvancedClipSimpleRNN, self).__init__()
         self.input_size = input_size
@@ -130,7 +130,7 @@ class AsymmetricAdvancedClipSimpleRNN(nn.Module):
         # Create dictionary of possible block types
         self.clip = AsymmetricAdvancedClip(1, 1)
         self.rec = wrapperargs(getattr(nn, unit_type), [input_size, hidden_size, num_layers])
-        self.lin = nn.Linear(hidden_size, output_size, bias=True)
+        self.lin = nn.Linear(hidden_size, output_size, bias=bias_fl)
         self.bias_fl = bias_fl
         self.skip = skip
         self.save_state = True
@@ -247,7 +247,7 @@ layer
 
 
 class AdvancedClipSimpleRNN(nn.Module):
-    def __init__(self, input_size=1, output_size=1, unit_type="LSTM", hidden_size=32, skip=1, bias_fl=True,
+    def __init__(self, input_size=1, output_size=1, unit_type="GRU", hidden_size=12, skip=0, bias_fl=True,
                  num_layers=1):
         super(AdvancedClipSimpleRNN, self).__init__()
         self.input_size = input_size
@@ -255,7 +255,7 @@ class AdvancedClipSimpleRNN(nn.Module):
         # Create dictionary of possible block types
         self.clip = AdvancedClip(1, 1)
         self.rec = wrapperargs(getattr(nn, unit_type), [input_size, hidden_size, num_layers])
-        self.lin = nn.Linear(hidden_size, output_size, bias=True)
+        self.lin = nn.Linear(hidden_size, output_size, bias=bias_fl)
         self.bias_fl = bias_fl
         self.skip = skip
         self.save_state = True
