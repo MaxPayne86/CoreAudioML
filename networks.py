@@ -661,7 +661,7 @@ class GatedConvNet(nn.Module):
         return self.blocks[-1](z).permute(2, 0, 1)
 
     # train_epoch runs one epoch of training
-    def train_epoch(self, input_data, target_data, loss_fcn, optim, bs):
+    def train_epoch(self, input_data, target_data, loss_fcn, optim, bs, init_len=200, up_fr=1000):
         # shuffle the segments at the start of the epoch
         shuffle = torch.randperm(input_data.shape[1])
 
@@ -687,7 +687,7 @@ class GatedConvNet(nn.Module):
         return ep_loss / (batch_i + 1)
 
     # only proc processes a the input data and calculates the loss, optionally grad can be tracked or not
-    def process_data(self, input_data, target_data, loss_fcn, grad=False):
+    def process_data(self, input_data, target_data, loss_fcn, chunk, grad=False):
         with (torch.no_grad() if not grad else nullcontext()):
             output = self(input_data)
             loss = loss_fcn(output, target_data)
