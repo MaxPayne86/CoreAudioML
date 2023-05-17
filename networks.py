@@ -384,10 +384,10 @@ class ConvSimpleRNN(nn.Module):
         self.dilation_growth = dilation_growth
         self.kernel_size = kernel_size
         self.channels = channels
-        self.conv_layers = nn.ModuleList()
+        self.conv = nn.ModuleList()
         dil_cnt = 0
         for dil in self.dilations:
-            self.conv_layers.append(nn.Conv1d(1 if dil_cnt == 0 else channels, out_channels=channels, kernel_size=kernel_size, dilation=dil, stride=1, padding=0, bias=True))
+            self.conv.append(nn.Conv1d(1 if dil_cnt == 0 else channels, out_channels=channels, kernel_size=kernel_size, dilation=dil, stride=1, padding=0, bias=True))
             dil_cnt = dil_cnt + 1
         # Recurrent block
         input_size=self.channels
@@ -402,7 +402,7 @@ class ConvSimpleRNN(nn.Module):
     def forward_conv(self, x):
         x = x.permute(1, 2, 0)
         y = x
-        for n, layer in enumerate(self.conv_layers):
+        for n, layer in enumerate(self.conv):
             y = layer(y)
             y = torch.cat((torch.zeros(x.shape[0], self.channels, x.shape[2] - y.shape[2]), y), dim=2)
         return y.permute(2, 0, 1)
