@@ -366,36 +366,49 @@ class AdvancedClipSimpleRNN(nn.Module):
 
 
 """
-A simple ConvSimpleRNN class that consists of multiple Conv1d layers followed by a single recurrent unit of type LSTM, GRU or Elman, followed by a fully connected
-layer
+A simple ConvSimpleRNN class that consists of multiple Conv1d layers each one applying a series of dilated convolutions, with the dilation of each successive layer
+increasing by a factor of 'dilation_growth' followed by a single recurrent unit of type LSTM, GRU or Elman, followed by a fully connected layer
 """
 
 
 class ConvSimpleRNN(nn.Module):
-    def __init__(self, input_size=1, channels=6, kernel_size=3, dilation=2, output_size=1, unit_type="GRU", hidden_size=12, skip=0, bias_fl=True,
+    def __init__(self, input_size=1, dilation_num=6, dilation_growth=2, channels=6, kernel_size=3, output_size=1, unit_type="GRU", hidden_size=12, skip=0, bias_fl=True,
                  num_layers=1):
         super(ConvSimpleRNN, self).__init__()
         self.input_size = input_size
         self.output_size = output_size
         # Create dictionary of possible block types
-        self.channels = channels
+        # Convolutional block
+        self.dilation_num = dilation_num
+        self.dilations = [dilation_growth ** layer for layer in range(dilation_num)]
+        self.dilation_growth = dilation_growth
         self.kernel_size = kernel_size
-        self.dilation = dilation
-        self.conv = nn.Conv1d(in_channels=self.input_size, out_channels=self.channels, kernel_size=self.kernel_size, dilation=self.dilation, stride=1, padding=0, bias=True)
+        self.channels = channels
+        self.conv_layers = nn.ModuleList()
+        dil_cnt = 0
+        for dil in self.dilations:
+            self.conv_layers.append(nn.Conv1d(1 if dil_cnt == 0 else channels, out_channels=channels, kernel_size=kernel_size, dilation=dil, stride=1, padding=0, bias=True))
+            dil_cnt = dil_cnt + 1
+        # Recurrent block
         input_size=self.channels
         self.rec = wrapperargs(getattr(nn, unit_type), [input_size, hidden_size, num_layers])
+        # Linear output, single neuron
         self.lin = nn.Linear(hidden_size, output_size, bias=bias_fl)
         self.bias_fl = bias_fl
         self.skip = skip
         self.save_state = True
         self.hidden = None
 
-    def forward(self, x, hidden=None):
+    def forward_conv(self, x):
         x = x.permute(1, 2, 0)
-        y = self.conv(x)
-        # Zero pad on the left side, so that z is the same length as x
-        y = torch.cat((torch.zeros(x.shape[0], self.channels, x.shape[2] - y.shape[2]), y), dim=2)
-        x = y.permute(2, 0, 1)
+        y = x
+        for n, layer in enumerate(self.conv_layers):
+            y = layer(y)
+            y = torch.cat((torch.zeros(x.shape[0], self.channels, x.shape[2] - y.shape[2]), y), dim=2)
+        return y.permute(2, 0, 1)
+
+    def forward(self, x, hidden=None):
+        x = self.forward_conv(x)
         if self.skip > 0:
             # save the residual for the skip connection
             res = x[:, :, 0:self.skip]
@@ -428,8 +441,9 @@ class ConvSimpleRNN(nn.Module):
     def save_model(self, file_name, direc=''):
         if direc:
             miscfuncs.dir_check(direc)
-        model_data = {'model_data': {'model': 'ConvSimpleRNN', 'input_size': self.conv.in_channels, 'skip': self.skip,
-                                     'channels': self.channels, 'dilation': self.dilation, 'kernel_size': self.kernel_size,
+        model_data = {'model_data': {'model': 'ConvSimpleRNN', 'input_size': self.input_size, 'skip': self.skip,
+                                     'dilation_num': self.dilation_num, 'dilation_growth': self.dilation_growth,
+                                     'channels': self.channels, 'kernel_size': self.kernel_size,
                                      'output_size': self.lin.out_features, 'unit_type': self.rec._get_name(),
                                      'num_layers': self.rec.num_layers, 'hidden_size': self.rec.hidden_size,
                                      'bias_fl': self.bias_fl}}
