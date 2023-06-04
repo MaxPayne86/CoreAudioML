@@ -12,14 +12,130 @@ def wrapperargs(func, args):
 
 
 """
+A simple asymmetric clip unit (standard cubic)
+
+Reference: https://wiki.analog.com/resources/tools-software/sigmastudio/toolbox/nonlinearprocessors/asymmetricsoftclipper
+
+Implemented by Massimo Pennazio Aida DSP maxipenna@libero.it 2023 All Rights Reserved
+
+0.1 <= alpha1 <= 10
+0.1 <= alpha2 <= 10
+
+if In > 0:
+    alpha = alpha1
+else:
+    alpha = alpha2
+x = In * (1 / alpha)
+if x <= -1:
+    fx = -2/3
+elif x >= 1:
+    fx = 2/3
+else:
+    fx = x - (np.power(x, 3) / 3)
+Out = fx * alpha
+
+"""
+
+class AsymmetricStandardCubicClip(nn.Module):
+    def __init__(self, size_in=1, size_out=1):
+        super().__init__()
+        self.size_in, self.size_out = size_in, size_out
+        bias = torch.Tensor(2)
+        self.bias = nn.Parameter(bias)
+        self.alpha_min = 0.1
+        self.alpha_max = 10
+
+        nn.init.uniform_(self.bias, self.alpha_min, self.alpha_max)  # Bias init
+
+    def std_cubic(self, x, alpha):
+        x = torch.mul(x, torch.div(1, alpha))
+        le_one = torch.le(x, -1.0).type(x.type())
+        ge_one = torch.ge(x, 1.0).type(x.type())
+
+        gt_one = torch.gt(x, -1.0).type(x.type())
+        lt_one = torch.lt(x, 1.0).type(x.type())
+        between = torch.mul(gt_one, lt_one)
+
+        le_one_out = torch.mul(le_one, -2/3)
+        ge_one_out = torch.mul(ge_one, 2/3)
+        between_out = torch.mul(between, x)
+        fx = torch.sub(between_out, torch.div(torch.pow(between_out, 3), 3))
+        out_ = torch.add(le_one_out, ge_one_out)
+        out = torch.mul(torch.add(out_, fx), alpha)
+        return out
+
+    def forward(self, x):
+        alpha1 = self.bias.data.clamp(self.alpha_min, self.alpha_max)[0]
+        alpha2 = self.bias.data.clamp(self.alpha_min, self.alpha_max)[1]
+        gt_zero = torch.gt(x, 0).type(x.type())
+        le_zero = torch.le(x, 0).type(x.type())
+        gt_zero_out = self.std_cubic(torch.mul(x, gt_zero), alpha1)
+        le_zero_out = self.std_cubic(torch.mul(x, le_zero), alpha2)
+        return torch.add(gt_zero_out, le_zero_out)
+
+
+"""
+A simple symmetric clip unit (standard cubic)
+
+Reference: https://wiki.analog.com/resources/tools-software/sigmastudio/toolbox/nonlinearprocessors/standardcubic
+
+Implemented by Massimo Pennazio Aida DSP maxipenna@libero.it 2023 All Rights Reserved
+
+0.1 <= alpha <= 10
+
+x = In * (1 / alpha)
+if x <= -1:
+    fx = -2/3
+elif x >= 1:
+    fx = 2/3
+else:
+    fx = x - (np.power(x, 3) / 3)
+Out = fx * alpha
+
+"""
+
+class StandardCubicClip(nn.Module):
+    def __init__(self, size_in=1, size_out=1):
+        super().__init__()
+        self.size_in, self.size_out = size_in, size_out
+        bias = torch.Tensor(1)
+        self.bias = nn.Parameter(bias)
+        self.alpha_min = 0.1
+        self.alpha_max = 10
+
+        nn.init.uniform_(self.bias, self.alpha_min, self.alpha_max)  # Bias init
+
+    def std_cubic(self, x, alpha):
+        x = torch.mul(x, torch.div(1, alpha))
+        le_one = torch.le(x, -1.0).type(x.type())
+        ge_one = torch.ge(x, 1.0).type(x.type())
+
+        gt_one = torch.gt(x, -1.0).type(x.type())
+        lt_one = torch.lt(x, 1.0).type(x.type())
+        between = torch.mul(gt_one, lt_one)
+
+        le_one_out = torch.mul(le_one, -2/3)
+        ge_one_out = torch.mul(ge_one, 2/3)
+        between_out = torch.mul(between, x)
+        fx = torch.sub(between_out, torch.div(torch.pow(between_out, 3), 3))
+        out_ = torch.add(le_one_out, ge_one_out)
+        out = torch.mul(torch.add(out_, fx), alpha)
+        return out
+
+    def forward(self, x):
+        alpha = self.bias.data.clamp(self.alpha_min, self.alpha_max)
+        return self.std_cubic(x, alpha)
+
+
+"""
 A simple asymmetric advanced clip unit (tanh)
 
 Reference: https://wiki.analog.com/resources/tools-software/sigmastudio/toolbox/nonlinearprocessors/asymmetricsoftclipper
 
 Implemented by Massimo Pennazio Aida DSP maxipenna@libero.it 2023 All Rights Reserved
 
-0.1 < tau1 < 0.9
-0.1 < tau2 < 0.9
+0.1 <= tau1 <= 0.9
+0.1 <= tau2 <= 0.9
 
 if In > 0:
     if In < tau1:
@@ -83,8 +199,9 @@ Reference: https://wiki.analog.com/resources/tools-software/sigmastudio/toolbox/
 
 Implemented by Massimo Pennazio Aida DSP maxipenna@libero.it 2023 All Rights Reserved
 
-0.1 < threshold < 0.9
-theta = (abs(In) - threshold) / (1 - threshold))
+0.1 <= threshold <= 0.9
+
+theta = (abs(In) - threshold) / (1 - threshold)
 if In < threshold:
    Out = In
  else
@@ -128,7 +245,7 @@ class AsymmetricAdvancedClipSimpleRNN(nn.Module):
         self.input_size = input_size
         self.output_size = output_size
         # Create dictionary of possible block types
-        self.clip = AsymmetricAdvancedClip(1, 1)
+        self.clip = AsymmetricStandardCubicClip(1, 1)
         self.rec = wrapperargs(getattr(nn, unit_type), [input_size, hidden_size, num_layers])
         self.lin = nn.Linear(hidden_size, output_size, bias=bias_fl)
         self.bias_fl = bias_fl
@@ -253,7 +370,7 @@ class AdvancedClipSimpleRNN(nn.Module):
         self.input_size = input_size
         self.output_size = output_size
         # Create dictionary of possible block types
-        self.clip = AdvancedClip(1, 1)
+        self.clip = StandardCubicClip(1, 1)
         self.rec = wrapperargs(getattr(nn, unit_type), [input_size, hidden_size, num_layers])
         self.lin = nn.Linear(hidden_size, output_size, bias=bias_fl)
         self.bias_fl = bias_fl
