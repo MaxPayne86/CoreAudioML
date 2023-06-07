@@ -14,6 +14,8 @@ def audio_converter(audio):
         return audio.astype(np.float32, order='C') / 2147483647.0
     elif audio.dtype == 'float32':
         return audio.astype(np.float32, order='C')
+    elif audio.dtype == 'float64':
+        return audio.astype(np.float32, order='C')
     else:
         print('unimplemented audio data type conversion...')
 
