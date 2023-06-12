@@ -1,156 +1,191 @@
 import torch
+from torch import Tensor
 import torch.nn as nn
 import CoreAudioML.miscfuncs as miscfuncs
 import math
 from contextlib import nullcontext
+from torch.cuda.amp import custom_bwd, custom_fwd
+
 
 def wrapperkwargs(func, kwargs):
     return func(**kwargs)
+
 
 def wrapperargs(func, args):
     return func(*args)
 
 
-"""
-A simple asymmetric clip unit (standard cubic)
+class DifferentiableClamp(torch.autograd.Function):
+    """
+    In the forward pass this operation behaves like torch.clamp.
+    But in the backward pass its gradient is 1 everywhere, as if instead of clamp one had used the identity function.
 
-Reference: https://wiki.analog.com/resources/tools-software/sigmastudio/toolbox/nonlinearprocessors/asymmetricsoftclipper
+    Ref: https://discuss.pytorch.org/t/exluding-torch-clamp-from-backpropagation-as-tf-stop-gradient-in-tensorflow/52404/6
+    """
 
-Implemented by Massimo Pennazio Aida DSP maxipenna@libero.it 2023 All Rights Reserved
+    @staticmethod
+    @custom_fwd
+    def forward(ctx, input, min, max):
+        return input.clamp(min=min, max=max)
 
-0.1 <= alpha1 <= 10
-0.1 <= alpha2 <= 10
+    @staticmethod
+    @custom_bwd
+    def backward(ctx, grad_output):
+        return grad_output.clone(), None, None
 
-if In > 0:
-    alpha = alpha1
-else:
-    alpha = alpha2
-x = In * (1 / alpha)
-if x <= -1:
-    fx = -2/3
-elif x >= 1:
-    fx = 2/3
-else:
-    fx = x - (np.power(x, 3) / 3)
-Out = fx * alpha
 
-"""
+def dclamp(input, min, max):
+    """
+    Like torch.clamp, but with a constant 1-gradient.
+    :param input: The input that is to be clamped.
+    :param min: The minimum value of the output.
+    :param max: The maximum value of the output.
+
+    Ref: https://discuss.pytorch.org/t/exluding-torch-clamp-from-backpropagation-as-tf-stop-gradient-in-tensorflow/52404/6
+    """
+    return DifferentiableClamp.apply(input, min, max)
+
+
+def std_cubic(x: Tensor, alpha: Tensor) -> Tensor:
+    x = torch.mul(x, torch.div(1, alpha))
+    le_one = torch.le(x, -1.0).type(x.type())
+    ge_one = torch.ge(x, 1.0).type(x.type())
+
+    gt_one = torch.gt(x, -1.0).type(x.type())
+    lt_one = torch.lt(x, 1.0).type(x.type())
+    between = torch.mul(gt_one, lt_one)
+
+    le_one_out = torch.mul(le_one, -2/3)
+    ge_one_out = torch.mul(ge_one, 2/3)
+    between_out = torch.mul(between, x)
+    fx = torch.sub(between_out, torch.div(torch.pow(between_out, 3), 3))
+    out_ = torch.add(le_one_out, ge_one_out)
+    out = torch.mul(torch.add(out_, fx), alpha)
+    return out
+
 
 class AsymmetricStandardCubicClip(nn.Module):
-    def __init__(self, size_in=1, size_out=1):
+    """
+    A simple asymmetric clip unit (standard cubic)
+
+    Reference: https://wiki.analog.com/resources/tools-software/sigmastudio/toolbox/nonlinearprocessors/asymmetricsoftclipper
+
+    Implemented by Massimo Pennazio Aida DSP maxipenna@libero.it 2023 All Rights Reserved
+
+    0.1 <= alpha1 <= 10
+    0.1 <= alpha2 <= 10
+
+    if In > 0:
+        alpha = alpha1
+    else:
+        alpha = alpha2
+    x = In * (1 / alpha)
+    if x <= -1:
+        fx = -2/3
+    elif x >= 1:
+        fx = 2/3
+    else:
+        fx = x - (np.power(x, 3) / 3)
+    Out = fx * alpha
+
+    """
+    __constants__ = ['in_features', 'out_features']
+    in_features: int
+    out_features: int
+    weight: Tensor
+    bias: Tensor
+
+    def __init__(self, in_features=1, out_features=1, device=None, dtype=None) -> None:
+        factory_kwargs = {'device': device, 'dtype': dtype}
         super().__init__()
-        self.size_in, self.size_out = size_in, size_out
-        bias = torch.Tensor(2)
-        self.bias = nn.Parameter(bias)
+        self.in_features = in_features
+        self.out_features = out_features
+        self.weight = nn.Parameter(torch.empty(2, **factory_kwargs))
+        self.bias = nn.Parameter(torch.empty(1, **factory_kwargs))
         self.alpha_min = 0.1
         self.alpha_max = 10
 
-        nn.init.uniform_(self.bias, self.alpha_min, self.alpha_max)  # Bias init
+        nn.init.constant_(self.weight, self.alpha_max) # Weights init
+        nn.init.zeros_(self.bias)  # Bias init
 
-    def std_cubic(self, x, alpha):
-        x = torch.mul(x, torch.div(1, alpha))
-        le_one = torch.le(x, -1.0).type(x.type())
-        ge_one = torch.ge(x, 1.0).type(x.type())
-
-        gt_one = torch.gt(x, -1.0).type(x.type())
-        lt_one = torch.lt(x, 1.0).type(x.type())
-        between = torch.mul(gt_one, lt_one)
-
-        le_one_out = torch.mul(le_one, -2/3)
-        ge_one_out = torch.mul(ge_one, 2/3)
-        between_out = torch.mul(between, x)
-        fx = torch.sub(between_out, torch.div(torch.pow(between_out, 3), 3))
-        out_ = torch.add(le_one_out, ge_one_out)
-        out = torch.mul(torch.add(out_, fx), alpha)
-        return out
-
-    def forward(self, x):
-        alpha1 = self.bias.data.clamp(self.alpha_min, self.alpha_max)[0]
-        alpha2 = self.bias.data.clamp(self.alpha_min, self.alpha_max)[1]
+    def forward(self, x: Tensor) -> Tensor:
+        alpha = dclamp(self.weight, self.alpha_min, self.alpha_max)
         gt_zero = torch.gt(x, 0).type(x.type())
         le_zero = torch.le(x, 0).type(x.type())
-        gt_zero_out = self.std_cubic(torch.mul(x, gt_zero), alpha1)
-        le_zero_out = self.std_cubic(torch.mul(x, le_zero), alpha2)
-        return torch.add(gt_zero_out, le_zero_out)
+        gt_zero_out = std_cubic(x=torch.mul(x, gt_zero), alpha=alpha[0])
+        le_zero_out = std_cubic(x=torch.mul(x, le_zero), alpha=alpha[1])
+        return torch.add(torch.add(gt_zero_out, le_zero_out), self.bias)
 
-
-"""
-A simple symmetric clip unit (standard cubic)
-
-Reference: https://wiki.analog.com/resources/tools-software/sigmastudio/toolbox/nonlinearprocessors/standardcubic
-
-Implemented by Massimo Pennazio Aida DSP maxipenna@libero.it 2023 All Rights Reserved
-
-0.1 <= alpha <= 10
-
-x = In * (1 / alpha)
-if x <= -1:
-    fx = -2/3
-elif x >= 1:
-    fx = 2/3
-else:
-    fx = x - (np.power(x, 3) / 3)
-Out = fx * alpha
-
-"""
 
 class StandardCubicClip(nn.Module):
-    def __init__(self, size_in=1, size_out=1):
+    """
+    A simple symmetric clip unit (standard cubic)
+
+    Reference: https://wiki.analog.com/resources/tools-software/sigmastudio/toolbox/nonlinearprocessors/standardcubic
+
+    Implemented by Massimo Pennazio Aida DSP maxipenna@libero.it 2023 All Rights Reserved
+
+    0.1 <= alpha <= 10
+
+    x = In * (1 / alpha)
+    if x <= -1:
+        fx = -2/3
+    elif x >= 1:
+        fx = 2/3
+    else:
+        fx = x - (np.power(x, 3) / 3)
+    Out = fx * alpha
+
+    """
+    __constants__ = ['in_features', 'out_features']
+    in_features: int
+    out_features: int
+    weight: Tensor
+    bias: Tensor
+
+    def __init__(self, in_features=1, out_features=1, device=None, dtype=None) -> None:
+        factory_kwargs = {'device': device, 'dtype': dtype}
         super().__init__()
-        self.size_in, self.size_out = size_in, size_out
-        bias = torch.Tensor(1)
-        self.bias = nn.Parameter(bias)
+        self.in_features = in_features
+        self.out_features = out_features
+        self.weight = nn.Parameter(torch.empty(1, **factory_kwargs))
+        self.bias = nn.Parameter(torch.empty(1, **factory_kwargs))
         self.alpha_min = 0.1
         self.alpha_max = 10
 
-        nn.init.uniform_(self.bias, self.alpha_min, self.alpha_max)  # Bias init
+        nn.init.constant_(self.weight, self.alpha_max) # Weights init
+        nn.init.zeros_(self.bias)  # Bias init
 
-    def std_cubic(self, x, alpha):
-        x = torch.mul(x, torch.div(1, alpha))
-        le_one = torch.le(x, -1.0).type(x.type())
-        ge_one = torch.ge(x, 1.0).type(x.type())
+    def forward(self, x: Tensor) -> Tensor:
+        alpha = dclamp(self.weight, self.alpha_min, self.alpha_max)
+        return torch.add(std_cubic(x=x, alpha=alpha), self.bias)
 
-        gt_one = torch.gt(x, -1.0).type(x.type())
-        lt_one = torch.lt(x, 1.0).type(x.type())
-        between = torch.mul(gt_one, lt_one)
-
-        le_one_out = torch.mul(le_one, -2/3)
-        ge_one_out = torch.mul(ge_one, 2/3)
-        between_out = torch.mul(between, x)
-        fx = torch.sub(between_out, torch.div(torch.pow(between_out, 3), 3))
-        out_ = torch.add(le_one_out, ge_one_out)
-        out = torch.mul(torch.add(out_, fx), alpha)
-        return out
-
-    def forward(self, x):
-        alpha = self.bias.data.clamp(self.alpha_min, self.alpha_max)
-        return self.std_cubic(x, alpha)
-
-
-"""
-A simple asymmetric advanced clip unit (tanh)
-
-Reference: https://wiki.analog.com/resources/tools-software/sigmastudio/toolbox/nonlinearprocessors/asymmetricsoftclipper
-
-Implemented by Massimo Pennazio Aida DSP maxipenna@libero.it 2023 All Rights Reserved
-
-0.1 <= tau1 <= 0.9
-0.1 <= tau2 <= 0.9
-
-if In > 0:
-    if In < tau1:
-        Out = In
-    else:
-        Out = tau1 + (1 - tau1) * tanh( (abs(In) - tau1) / (1 - tau1) )
-else:
-    if In < tau2:
-        Out = In
-    else:
-        Out = -tau2 - (1 - tau2) * tanh( (abs(In) - tau2) / (1 - tau2) )
-
-"""
 
 class AsymmetricAdvancedClip(nn.Module):
+    """
+    A simple asymmetric advanced clip unit (tanh)
+
+    DO NOT USE WIP: https://ez.analog.com/dsp/sigmadsp/f/q-a/570452/asymmetricsoftclipper-and-advancedclip-formulas-are-simply-wrong
+
+    Reference: https://wiki.analog.com/resources/tools-software/sigmastudio/toolbox/nonlinearprocessors/asymmetricsoftclipper
+
+    Implemented by Massimo Pennazio Aida DSP maxipenna@libero.it 2023 All Rights Reserved
+
+    0.1 <= tau1 <= 0.9
+    0.1 <= tau2 <= 0.9
+
+    if In > 0:
+        if In < tau1:
+            Out = In
+        else:
+            Out = tau1 + (1 - tau1) * tanh( (abs(In) - tau1) / (1 - tau1) )
+    else:
+        if In < tau2:
+            Out = In
+        else:
+            Out = -tau2 - (1 - tau2) * tanh( (abs(In) - tau2) / (1 - tau2) )
+
+    """
     def __init__(self, size_in=1, size_out=1):
         super().__init__()
         self.size_in, self.size_out = size_in, size_out
@@ -192,24 +227,25 @@ class AsymmetricAdvancedClip(nn.Module):
         return out
 
 
-"""
-A simple advanced clip unit (tanh)
-
-Reference: https://wiki.analog.com/resources/tools-software/sigmastudio/toolbox/nonlinearprocessors/advancedclip
-
-Implemented by Massimo Pennazio Aida DSP maxipenna@libero.it 2023 All Rights Reserved
-
-0.1 <= threshold <= 0.9
-
-theta = (abs(In) - threshold) / (1 - threshold)
-if In < threshold:
-   Out = In
- else
-   Out = (In * threshold + (1 - threshold) * tanh(theta))
-
-"""
-
 class AdvancedClip(nn.Module):
+    """
+    A simple advanced clip unit (tanh)
+
+    DO NOT USE WIP: https://ez.analog.com/dsp/sigmadsp/f/q-a/570452/asymmetricsoftclipper-and-advancedclip-formulas-are-simply-wrong
+
+    Reference: https://wiki.analog.com/resources/tools-software/sigmastudio/toolbox/nonlinearprocessors/advancedclip
+
+    Implemented by Massimo Pennazio Aida DSP maxipenna@libero.it 2023 All Rights Reserved
+
+    0.1 <= threshold <= 0.9
+
+    theta = (abs(In) - threshold) / (1 - threshold)
+    if In < threshold:
+       Out = In
+     else
+       Out = (In * threshold + (1 - threshold) * tanh(theta))
+
+    """
     def __init__(self, size_in=1, size_out=1):
         super().__init__()
         self.size_in, self.size_out = size_in, size_out
@@ -232,45 +268,39 @@ class AdvancedClip(nn.Module):
         return out
 
 
-"""
-A simple AdvancedClip RNN class that consists of an asymmetric anvanced clip unit in front of a single recurrent unit of type LSTM, GRU or Elman, followed by a fully connected
-layer
-"""
-
-
 class AsymmetricAdvancedClipSimpleRNN(nn.Module):
-    def __init__(self, input_size=1, output_size=1, unit_type="GRU", hidden_size=12, skip=0, bias_fl=True,
-                 num_layers=1):
+    """
+    A simple AdvancedClip RNN class that consists of an asymmetric anvanced clip unit and a single recurrent unit of type LSTM, GRU or Elman, followed by a fully connected
+    layer. You can configure the position of the clip unit using clip_position arg.
+    """
+    def __init__(self, input_size=1, output_size=1, unit_type="GRU", hidden_size=12, clip_position=0x00, bias_fl=True,
+                 num_layers=1, parallel_clip=False):
         super(AsymmetricAdvancedClipSimpleRNN, self).__init__()
         self.input_size = input_size
         self.output_size = output_size
         # Create dictionary of possible block types
         self.clip = AsymmetricStandardCubicClip(1, 1)
+        self.clip_position = clip_position
         self.rec = wrapperargs(getattr(nn, unit_type), [input_size, hidden_size, num_layers])
         self.lin = nn.Linear(hidden_size, output_size, bias=bias_fl)
         self.bias_fl = bias_fl
-        self.skip = skip
         self.save_state = True
         self.hidden = None
 
-    def forward(self, x, hidden=None):
-        x = self.clip(x)
-        if self.skip > 0:
-            # save the residual for the skip connection
-            res = x[:, :, 0:self.skip]
-            if(hidden):
-                x, self.hidden = self.rec(x, hidden)
-                return ((self.lin(x) + res), self.hidden)
-            else:
-                x, self.hidden = self.rec(x, self.hidden)
-                return self.lin(x) + res
+    def forward(self, x):
+        if self.clip_position == 0x00: # Head pos
+            x, self.hidden = self.rec(self.clip(x), self.hidden)
+            return self.lin(x)
+        elif self.clip_position == 0x01: # Tail pos
+            x, self.hidden = self.rec(x, self.hidden)
+            return self.clip(self.lin(x))
+        elif self.clip_position == 0x11: # Parallel pos
+            res = x
+            x, self.hidden = self.rec(x, self.hidden)
+            return torch.add(self.lin(x), self.clip(res))
         else:
-            if(hidden):
-                x, self.hidden = self.rec(x, hidden)
-                return (self.lin(x), self.hidden)
-            else:
-                x, self.hidden = self.rec(x, self.hidden)
-                return self.lin(x)
+            print("Error! Invalid value for arg clip_position!")
+            exit(1)
 
     # detach hidden state, this resets gradient tracking on the hidden state
     def detach_hidden(self):
@@ -287,7 +317,7 @@ class AsymmetricAdvancedClipSimpleRNN(nn.Module):
     def save_model(self, file_name, direc=''):
         if direc:
             miscfuncs.dir_check(direc)
-        model_data = {'model_data': {'model': 'AsymmetricAdvancedClipSimpleRNN', 'input_size': self.rec.input_size, 'skip': self.skip,
+        model_data = {'model_data': {'model': 'AsymmetricAdvancedClipSimpleRNN', 'input_size': self.rec.input_size, 'clip_position': self.clip_position,
                                      'output_size': self.lin.out_features, 'unit_type': self.rec._get_name(),
                                      'num_layers': self.rec.num_layers, 'hidden_size': self.rec.hidden_size,
                                      'bias_fl': self.bias_fl}}
