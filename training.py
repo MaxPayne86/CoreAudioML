@@ -50,7 +50,7 @@ class PreEmph(nn.Module):
         # Desired lp f = 5.9659e+03 Hz
         if lp:
             a1 = (5.9659e+03 * 2 * 3.1416) / fs
-            self.preemphlp = FIRFilter(filter_type='hp', coef=-a1, fs=fs) # Note: hp with -coef = lp see Auraloss impl.
+            self.preemphlp = FIRFilter(filter_type='hp', coef=-a1, fs=fs, ntaps=3) # Note: hp with -coef = lp see Auraloss impl.
 
     def forward(self, output, target):
         if self.preemphlp:
