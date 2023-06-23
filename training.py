@@ -44,12 +44,20 @@ class DCLoss(nn.Module):
 
 
 class PreEmph(nn.Module):
-    def __init__(self, filter_type='hp', coef=0.85, fs=48000):
+    def __init__(self, filter_type='hp', coef=0.7809, fs=48000, lp=True):
         super(PreEmph, self).__init__()
         self.preemph = FIRFilter(filter_type=filter_type, coef=coef, fs=fs)
+        # Desired lp f = 5.9659e+03 Hz
+        if lp:
+            a1 = (5.9659e+03 * 2 * 3.1416) / fs
+            self.preemphlp = FIRFilter(filter_type='hp', coef=-a1, fs=fs) # Note: hp with -coef = lp see Auraloss impl.
 
     def forward(self, output, target):
-        output, target = self.preemph(output.permute(1, 2, 0), target.permute(1, 2, 0))
+        if self.preemphlp:
+            output, target = self.preemph(output.permute(1, 2, 0), target.permute(1, 2, 0))
+            output, target = self.preemphlp(output, target)
+        else:
+            output, target = self.preemph(output.permute(1, 2, 0), target.permute(1, 2, 0))
         return output.permute(2, 0, 1), target.permute(2, 0, 1)
 
 
