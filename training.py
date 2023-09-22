@@ -3,6 +3,40 @@ import torch.nn as nn
 
 from auraloss.perceptual import FIRFilter
 
+
+class auraloss_adapter(nn.Module):
+  '''
+  Courtesy of KaisKermani <kaiskermani@gmail.com>
+
+  This is because auraloss loss functions don't take the input in the same shape as torch LSTM Layers do:
+  time domain losses input: (seq_len, chs, bs)
+  freq domain losses input: (bs, chs, seq_len)
+
+  IDK this is how managed to make it work..
+  '''
+  def __init__(self, loss_func, domain="time", filter=None):
+    super().__init__()
+    self.loss_func = loss_func
+    self.permutation = None
+    if domain == 'time':
+      self.permutation = (1, 2, 0)
+    elif domain == 'freq':
+      self.permutation = (0, 2, 1)
+
+    self.filter = None
+    if filter is not None:
+      self.filter = FIRFilter(filter)
+
+  def forward(self, input, target):
+    alt_input = input.permute(self.permutation)
+    alt_target = target.permute(self.permutation)
+
+    if self.filter is not None:
+      alt_input, alt_target = self.filter(alt_input, alt_target)
+
+    return self.loss_func(alt_input, alt_target)
+
+
 # ESR loss calculates the Error-to-signal between the output/target
 class ESRLoss(nn.Module):
     def __init__(self):
