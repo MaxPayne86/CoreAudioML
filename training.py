@@ -46,10 +46,7 @@ class ESRLoss(nn.Module):
     def forward(self, output, target, pooling=False, scale_factor=0.01):
         loss = torch.add(target, -output)
         loss = torch.pow(loss, 2)
-        if pooling is False:
-            loss = torch.mean(loss)
-            energy = torch.mean(torch.pow(target, 2)) + self.epsilon
-        else:
+        if pooling:
             size = int(list(loss.size())[0])
             pooling_size = int(size * scale_factor)
             # Apply 1D pooling and then interpolate to match the size
@@ -58,6 +55,9 @@ class ESRLoss(nn.Module):
             out = m(loss)
             loss = nn.functional.interpolate(out, size, mode='linear', align_corners=False)
             loss = torch.permute(loss, (2, 1, 0))
+            energy = torch.mean(torch.pow(target, 2)) + self.epsilon
+        else:
+            loss = torch.mean(loss)
             energy = torch.mean(torch.pow(target, 2)) + self.epsilon
 
         loss = torch.div(loss, energy)
