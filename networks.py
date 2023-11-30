@@ -387,13 +387,11 @@ class AsymmetricAdvancedClipSimpleRNN(nn.Module):
         return output, loss
 
 
-"""
-A simple AdvancedClip RNN class that consists of an anvanced clip unit in front of a single recurrent unit of type LSTM, GRU or Elman, followed by a fully connected
-layer
-"""
-
-
 class AdvancedClipSimpleRNN(nn.Module):
+    """
+    A simple AdvancedClip RNN class that consists of an anvanced clip unit in front of a single recurrent unit of type LSTM, GRU or Elman, followed by a fully connected
+    layer
+    """
     def __init__(self, input_size=1, output_size=1, unit_type="GRU", hidden_size=12, skip=0, bias_fl=True,
                  num_layers=1):
         super(AdvancedClipSimpleRNN, self).__init__()
@@ -512,13 +510,11 @@ class AdvancedClipSimpleRNN(nn.Module):
         return output, loss
 
 
-"""
-A simple ConvSimpleRNN class that consists of multiple Conv1d layers each one applying a series of dilated convolutions, with the dilation of each successive layer
-increasing by a factor of 'dilation_growth' followed by a single recurrent unit of type LSTM, GRU or Elman, followed by a fully connected layer
-"""
-
-
 class ConvSimpleRNN(nn.Module):
+    """
+    A simple ConvSimpleRNN class that consists of multiple Conv1d layers each one applying a series of dilated convolutions, with the dilation of each successive layer
+    increasing by a factor of 'dilation_growth' followed by a single recurrent unit of type LSTM, GRU or Elman, followed by a fully connected layer
+    """
     def __init__(self, input_size=1, dilation_num=6, dilation_growth=2, channels=6, kernel_size=3, output_size=1, unit_type="GRU", hidden_size=12, skip=0, bias_fl=True,
                  num_layers=1):
         super(ConvSimpleRNN, self).__init__()
@@ -660,13 +656,11 @@ class ConvSimpleRNN(nn.Module):
         return output, loss
 
 
-"""
-A simple RNN class that consists of a single recurrent unit of type LSTM, GRU or Elman, followed by a fully connected
-layer
-"""
-
-
 class SimpleRNN(nn.Module):
+    """
+    A simple RNN class that consists of a single recurrent unit of type LSTM, GRU or Elman, followed by a fully connected
+    layer
+    """
     def __init__(self, input_size=1, output_size=1, unit_type="LSTM", hidden_size=32, skip=1, bias_fl=True,
                  num_layers=1):
         super(SimpleRNN, self).__init__()
@@ -784,22 +778,19 @@ class SimpleRNN(nn.Module):
         return output, loss
 
 
-""" 
-Gated Convolutional Neural Net class, based on the 'WaveNet' architecture, takes a single channel of audio as input and
-produces a single channel of audio of equal length as output. one-sided zero-padding is used to ensure the network is 
-causal and doesn't reduce the length of the audio.
-
-Made up of 'blocks', each one applying a series of dilated convolutions, with the dilation of each successive layer 
-increasing by a factor of 'dilation_growth'. 'layers' determines how many convolutional layers are in each block,
-'kernel_size' is the size of the filters. Channels is the number of convolutional channels.
-
-The output of the model is creating by the linear mixer, which sums weighted outputs from each of the layers in the 
-model
-
-"""
-
-
 class GatedConvNet(nn.Module):
+    """ 
+    Gated Convolutional Neural Net class, based on the 'WaveNet' architecture, takes a single channel of audio as input and
+    produces a single channel of audio of equal length as output. one-sided zero-padding is used to ensure the network is 
+    causal and doesn't reduce the length of the audio.
+
+    Made up of 'blocks', each one applying a series of dilated convolutions, with the dilation of each successive layer 
+    increasing by a factor of 'dilation_growth'. 'layers' determines how many convolutional layers are in each block,
+    'kernel_size' is the size of the filters. Channels is the number of convolutional channels.
+
+    The output of the model is creating by the linear mixer, which sums weighted outputs from each of the layers in the 
+    model
+    """
     def __init__(self, channels=8, blocks=2, layers=9, dilation_growth=2, kernel_size=3):
         super(GatedConvNet, self).__init__()
         # Set number of layers  and hidden_size for network layer/s
@@ -871,13 +862,11 @@ class GatedConvNet(nn.Module):
         miscfuncs.json_save(model_data, file_name, direc)
 
 
-""" 
-Gated convolutional neural net block, applies successive gated convolutional layers to the input, a total of 'layers'
-layers are applied, with the filter size 'kernel_size' and the dilation increasing by a factor of 'dilation_growth' for
- each successive layer."""
-
-
 class ResConvBlock1DCausalGated(nn.Module):
+    """ 
+    Gated convolutional neural net block, applies successive gated convolutional layers to the input, a total of 'layers'
+    layers are applied, with the filter size 'kernel_size' and the dilation increasing by a factor of 'dilation_growth' for
+     each successive layer."""
     def __init__(self, chan_input, chan_output, dilation_growth, kernel_size, layers):
         super(ResConvBlock1DCausalGated, self).__init__()
         self.channels = chan_output
@@ -897,12 +886,10 @@ class ResConvBlock1DCausalGated(nn.Module):
         return x, z
 
 
-""" 
-Gated convolutional layer, zero pads and then applies a causal convolution to the input """
-
-
 class ResConvLayer1DCausalGated(nn.Module):
-
+    """ 
+    Gated convolutional layer, zero pads and then applies a causal convolution to the input
+    """
     def __init__(self, chan_input, chan_output, dilation, kernel_size):
         super(ResConvLayer1DCausalGated, self).__init__()
         self.channels = chan_output
@@ -922,20 +909,20 @@ class ResConvLayer1DCausalGated(nn.Module):
         return x, z
 
 
-""" 
-Recurrent Neural Network class, blocks is a list of layers, each layer is described by a dictionary, layers can also
-be added after initialisation via the 'add_layer' function
-
-params is a dict that holds 'meta parameters' for the whole network
-skip inserts a skip connection from the input to the output, the value of skip determines how many of the input
-channels to add to the output (if skip = 2, for example, the output must have at least two channels)
-
-e.g blocks = {'block_type': 'RNN', 'input_size': 1, 'output_size': 1, 'hidden_size': 16}
-
-This allows you to add an arbitrary number of RNN blocks. The SimpleRNN is easier to use but only includes one reccurent
-unit followed by a fully connect layer.
-"""
 class RecNet(nn.Module):
+    """ 
+    Recurrent Neural Network class, blocks is a list of layers, each layer is described by a dictionary, layers can also
+    be added after initialisation via the 'add_layer' function
+
+    params is a dict that holds 'meta parameters' for the whole network
+    skip inserts a skip connection from the input to the output, the value of skip determines how many of the input
+    channels to add to the output (if skip = 2, for example, the output must have at least two channels)
+
+    e.g blocks = {'block_type': 'RNN', 'input_size': 1, 'output_size': 1, 'hidden_size': 16}
+
+    This allows you to add an arbitrary number of RNN blocks. The SimpleRNN is easier to use but only includes one reccurent
+    unit followed by a fully connect layer.
+    """
     def __init__(self, blocks=None, skip=0):
         super(RecNet, self).__init__()
         if type(blocks) == dict:
