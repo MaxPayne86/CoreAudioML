@@ -278,7 +278,6 @@ class AsymmetricAdvancedClipSimpleRNN(nn.Module):
         super(AsymmetricAdvancedClipSimpleRNN, self).__init__()
         self.input_size = input_size
         self.output_size = output_size
-        # Create dictionary of possible block types
         self.clip = AsymmetricStandardCubicClip(1, 1)
         self.clip_position = clip_position
         self.rec = wrapperargs(getattr(nn, unit_type), [input_size, hidden_size, num_layers])
@@ -397,7 +396,6 @@ class AdvancedClipSimpleRNN(nn.Module):
         super(AdvancedClipSimpleRNN, self).__init__()
         self.input_size = input_size
         self.output_size = output_size
-        # Create dictionary of possible block types
         self.clip = StandardCubicClip(1, 1)
         self.rec = wrapperargs(getattr(nn, unit_type), [input_size, hidden_size, num_layers])
         self.lin = nn.Linear(hidden_size, output_size, bias=bias_fl)
@@ -520,7 +518,6 @@ class ConvSimpleRNN(nn.Module):
         super(ConvSimpleRNN, self).__init__()
         self.input_size = input_size
         self.output_size = output_size
-        # Create dictionary of possible block types
         # Convolutional block
         self.dilation_num = dilation_num
         self.dilations = [dilation_growth ** layer for layer in range(dilation_num)]
@@ -666,7 +663,6 @@ class SimpleRNN(nn.Module):
         super(SimpleRNN, self).__init__()
         self.input_size = input_size
         self.output_size = output_size
-        # Create dictionary of possible block types
         self.rec = wrapperargs(getattr(nn, unit_type), [input_size, hidden_size, num_layers])
         self.lin = nn.Linear(hidden_size, output_size, bias=bias_fl)
         self.bias_fl = bias_fl
@@ -779,16 +775,16 @@ class SimpleRNN(nn.Module):
 
 
 class GatedConvNet(nn.Module):
-    """ 
+    """
     Gated Convolutional Neural Net class, based on the 'WaveNet' architecture, takes a single channel of audio as input and
-    produces a single channel of audio of equal length as output. one-sided zero-padding is used to ensure the network is 
+    produces a single channel of audio of equal length as output. one-sided zero-padding is used to ensure the network is
     causal and doesn't reduce the length of the audio.
 
-    Made up of 'blocks', each one applying a series of dilated convolutions, with the dilation of each successive layer 
+    Made up of 'blocks', each one applying a series of dilated convolutions, with the dilation of each successive layer
     increasing by a factor of 'dilation_growth'. 'layers' determines how many convolutional layers are in each block,
     'kernel_size' is the size of the filters. Channels is the number of convolutional channels.
 
-    The output of the model is creating by the linear mixer, which sums weighted outputs from each of the layers in the 
+    The output of the model is creating by the linear mixer, which sums weighted outputs from each of the layers in the
     model
     """
     def __init__(self, channels=8, blocks=2, layers=9, dilation_growth=2, kernel_size=3):
@@ -863,7 +859,7 @@ class GatedConvNet(nn.Module):
 
 
 class ResConvBlock1DCausalGated(nn.Module):
-    """ 
+    """
     Gated convolutional neural net block, applies successive gated convolutional layers to the input, a total of 'layers'
     layers are applied, with the filter size 'kernel_size' and the dilation increasing by a factor of 'dilation_growth' for
      each successive layer."""
@@ -887,7 +883,7 @@ class ResConvBlock1DCausalGated(nn.Module):
 
 
 class ResConvLayer1DCausalGated(nn.Module):
-    """ 
+    """
     Gated convolutional layer, zero pads and then applies a causal convolution to the input
     """
     def __init__(self, chan_input, chan_output, dilation, kernel_size):
@@ -910,7 +906,7 @@ class ResConvLayer1DCausalGated(nn.Module):
 
 
 class RecNet(nn.Module):
-    """ 
+    """
     Recurrent Neural Network class, blocks is a list of layers, each layer is described by a dictionary, layers can also
     be added after initialisation via the 'add_layer' function
 
@@ -960,7 +956,7 @@ class RecNet(nn.Module):
     def reset_hidden(self):
         for each in self.layers:
             each.reset_hidden()
-            
+
     # Add layer to the network, params is a dictionary contains the layer keyword arguments
     def add_layer(self, params):
         # If this is the first layer, define the network input size
