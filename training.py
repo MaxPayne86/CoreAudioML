@@ -96,11 +96,11 @@ class PreEmph(nn.Module):
 
 
 class LossWrapper(nn.Module):
-    def __init__(self, losses, pre_filt=None):
+    def __init__(self, losses, pre_filt=None, samplerate=48000):
         super(LossWrapper, self).__init__()
         loss_dict = {'ESR': ESRLoss(), 'DC': DCLoss()}
         if pre_filt:
-            pre_filt = PreEmph(filter_type=pre_filt, fs=48000)
+            pre_filt = PreEmph(filter_type=pre_filt, fs=samplerate)
             loss_dict['ESRPre'] = lambda output, target: loss_dict['ESR'].forward(*pre_filt(output, target))
         loss_functions = [[loss_dict[key], value] for key, value in losses.items()]
 
