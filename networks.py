@@ -531,7 +531,7 @@ class EnhancedReceptionSimpleRNN(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         if self.buf is None:
             # Initialize buffer based on the input shape
-            batch_size, seq_len, num_features = x.shape
+            batch_size, seq_len, num_features = x.shape # num_features = input_size
             self.buf = torch.zeros([batch_size, seq_len, self.reception_size * num_features], **self.factory_kwargs)
 
         # Append new input to the buffer and remove the oldest elements
