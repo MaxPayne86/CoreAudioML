@@ -514,21 +514,30 @@ class EnhancedReceptionSimpleRNN(nn.Module):
     layer
     """
     def __init__(self, input_size=1, output_size=1, unit_type="GRU", hidden_size=12, bias_fl=True,
-                 num_layers=1):
+                 num_layers=1, reception_size=8, device=None, dtype=None) -> None:
+        factory_kwargs = {'device': device, 'dtype': dtype}
         super(EnhancedReceptionSimpleRNN, self).__init__()
+        self.factory_kwargs = factory_kwargs
         self.input_size = input_size
         self.output_size = output_size
-        self.EnhancedReception = True
-        self.rec = wrapperargs(getattr(nn, unit_type), [hidden_size, hidden_size, num_layers])
+        self.reception_size = reception_size
+        self.buf = None  # Placeholder for buffer
+        self.rec = wrapperargs(getattr(nn, unit_type), [input_size * reception_size, hidden_size, num_layers])
         self.lin = nn.Linear(hidden_size, output_size, bias=bias_fl)
         self.bias_fl = bias_fl
         self.save_state = True
         self.hidden = None
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
+        if self.buf is None:
+            # Initialize buffer based on the input shape
+            batch_size, seq_len, num_features = x.shape
+            self.buf = torch.zeros([batch_size, seq_len, self.reception_size * num_features], **self.factory_kwargs)
 
-        x, self.hidden = self.rec(x, self.hidden)
-        return self.lin(x)
+        # Append new input to the buffer and remove the oldest elements
+        self.buf = torch.cat((self.buf[:, :, num_features:], x), dim=2)
+        rec_out, self.hidden = self.rec(self.buf, self.hidden)
+        return self.lin(rec_out)
 
     # detach hidden state, this resets gradient tracking on the hidden state
     def detach_hidden(self):
