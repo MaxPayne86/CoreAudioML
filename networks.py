@@ -554,7 +554,7 @@ class EnhancedReceptionSimpleRNN(nn.Module):
     def save_model(self, file_name, direc=''):
         if direc:
             miscfuncs.dir_check(direc)
-        model_data = {'model_data': {'model': 'EnhancedReceptionSimpleRNN', 'input_size': self.rec.input_size, 'skip': self.skip,
+        model_data = {'model_data': {'model': 'EnhancedReceptionSimpleRNN', 'input_size': self.rec.input_size, 'reception_size': self.reception_size,
                                      'output_size': self.lin.out_features, 'unit_type': self.rec._get_name(),
                                      'num_layers': self.rec.num_layers, 'hidden_size': self.rec.hidden_size,
                                      'bias_fl': self.bias_fl}}
