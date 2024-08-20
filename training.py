@@ -96,7 +96,7 @@ class PreEmph(nn.Module):
 
 
 class LossWrapper(nn.Module):
-    def __init__(self, losses, pre_filt=None, samplerate=48000):
+    def __init__(self, losses, pre_filt=None, samplerate: int = 48000):
         super(LossWrapper, self).__init__()
         loss_dict = {'ESR': ESRLoss(), 'DC': DCLoss()}
         if pre_filt:
