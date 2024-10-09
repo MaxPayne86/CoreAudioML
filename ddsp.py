@@ -8,10 +8,9 @@
 # Checkout https://github.com/magenta/ddsp for more information.
 
 import torch
-from torch import Tensor
-import torch.nn as nn
-import math
-from torch.cuda.amp import custom_bwd, custom_fwd
+from torch import nn, Tensor
+from torch.autograd import Function
+from torch.autograd.function import custom_fwd, custom_bwd
 
 
 def wrapperkwargs(func, kwargs):
@@ -22,7 +21,7 @@ def wrapperargs(func, args):
     return func(*args)
 
 
-class DifferentiableClamp(torch.autograd.Function):
+class DifferentiableClamp(Function):
     """
     In the forward pass this operation behaves like torch.clamp.
     But in the backward pass its gradient is 1 everywhere, as if instead of clamp one had used the identity function.
