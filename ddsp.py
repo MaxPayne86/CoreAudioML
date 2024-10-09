@@ -13,14 +13,6 @@ from torch.autograd import Function
 from torch.autograd.function import custom_fwd, custom_bwd
 
 
-def wrapperkwargs(func, kwargs):
-    return func(**kwargs)
-
-
-def wrapperargs(func, args):
-    return func(*args)
-
-
 class DifferentiableClamp(Function):
     """
     In the forward pass this operation behaves like torch.clamp.
