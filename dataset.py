@@ -110,9 +110,9 @@ class DataSet:
             if len(set_names) > 1:
                 raw_audio = audio_splitter(raw_audio, splits)
                 for n, sets in enumerate(set_names):
-                    self.subsets[set_names[n]].add_data(np_data[0], raw_audio[n], ext, cond_val)
+                    self.subsets[set_names[n]].add_data(np_data[0], np.ascontiguousarray(raw_audio[n]), ext, cond_val)
             elif len(set_names) == 1:
-                self.subsets[set_names[0]].add_data(np_data[0], raw_audio, ext, cond_val)
+                self.subsets[set_names[0]].add_data(np_data[0], np.ascontiguousarray(raw_audio), ext, cond_val)
 
 
 # The SubSet class holds a subset of data,
