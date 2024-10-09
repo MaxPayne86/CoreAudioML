@@ -4,9 +4,8 @@
 #
 # This file contains custom network models that mix standard RNNs with custom audio processors or input data manipulation.
 
-import torch
+import torch, torch.nn as nn
 from torch import Tensor
-import torch.nn as nn
 import CoreAudioML.miscfuncs as miscfuncs
 import math
 from contextlib import nullcontext
