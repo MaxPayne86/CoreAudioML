@@ -10,6 +10,35 @@ def wrapperkwargs(func, kwargs):
 def wrapperargs(func, args):
     return func(*args)
 
+def fade_in(length):
+    """Generate a linear fade-in mask."""
+    return torch.linspace(0, 1, steps=length)
+
+def fade_out(length):
+    """Generate a linear fade-out mask."""
+    return torch.linspace(1, 0, steps=length)
+
+def apply_fade(tensor, fade_size=20):
+    """Apply fade-in and fade-out to the tensor without tracking gradients."""
+    if fade_size == 0:
+        return tensor
+
+    length = tensor.size(0)
+
+    # Generate fade-in and fade-out masks
+    fade_in_mask = fade_in(fade_size).view(-1, 1, 1).to(tensor.device)
+    fade_out_mask = fade_out(fade_size).view(-1, 1, 1).to(tensor.device)
+
+    with torch.no_grad():
+        # Create new tensors for the faded sections
+        faded_tensor = tensor.clone()
+        faded_tensor[:fade_size] = torch.mul(tensor[:fade_size], fade_in_mask)
+        faded_tensor[-fade_size:] = torch.mul(tensor[-fade_size:], fade_out_mask)
+
+        # Combine the faded sections with the middle section
+        tensor = torch.cat((faded_tensor[:fade_size], tensor[fade_size:-fade_size], faded_tensor[-fade_size:]), dim=0)
+
+    return tensor
 
 class SimpleRNN(nn.Module):
     """
@@ -75,7 +104,7 @@ class SimpleRNN(nn.Module):
         miscfuncs.json_save(model_data, file_name, direc)
 
     # train_epoch runs one epoch of training
-    def train_epoch(self, input_data, target_data, loss_fcn, optim, bs, init_len=200, up_fr=1000):
+    def train_epoch(self, input_data, target_data, loss_fcn, optim, bs, init_len=200, up_fr=1000, up_fr_fade=0):
         # shuffle the segments at the start of the epoch
         shuffle = torch.randperm(input_data.shape[1])
 
@@ -96,10 +125,10 @@ class SimpleRNN(nn.Module):
             # Iterate over the remaining samples in the mini batch
             for k in range(math.ceil((input_batch.shape[0] - init_len) / up_fr)):
                 # Process input batch with neural network
-                output = self(input_batch[start_i:start_i + up_fr, :, :])
+                output = self(apply_fade(input_batch[start_i:start_i + up_fr, :, :], up_fr_fade))
 
                 # Calculate loss and update network parameters
-                loss = loss_fcn(output, target_batch[start_i:start_i + up_fr, :, :])
+                loss = loss_fcn(output, apply_fade(target_batch[start_i:start_i + up_fr, :, :], up_fr_fade))
                 loss.backward()
                 optim.step()
 
@@ -117,17 +146,17 @@ class SimpleRNN(nn.Module):
         return ep_loss / (batch_i + 1)
 
     # Only proc processes a the input data and calculates the loss, optionally grad can be tracked or not
-    def process_data(self, input_data, target_data, loss_fcn, chunk, grad=False):
+    def process_data(self, input_data, target_data, loss_fcn, chunk, chunk_fade=0, grad=False):
         with (torch.no_grad() if not grad else nullcontext()):
             output = torch.empty_like(target_data)
             for l in range(int(output.size()[0] / chunk)):
-                output[l * chunk:(l + 1) * chunk] = self(input_data[l * chunk:(l + 1) * chunk])
+                output[l * chunk:(l + 1) * chunk] = self(apply_fade(input_data[l * chunk:(l + 1) * chunk], chunk_fade))
                 self.detach_hidden()
             # If the data set doesn't divide evenly into the chunk length, process the remainder
             if not (output.size()[0] / chunk).is_integer():
-                output[(l + 1) * chunk:-1] = self(input_data[(l + 1) * chunk:-1])
+                output[(l + 1) * chunk:-1] = self(apply_fade(input_data[(l + 1) * chunk:-1], chunk_fade))
             self.reset_hidden()
-            loss = loss_fcn(output, target_data)
+            loss = loss_fcn(output, apply_fade(target_data, chunk_fade))
         return output, loss
 
 
