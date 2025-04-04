@@ -65,8 +65,9 @@ sinewave = amplitude * np.sin(2 * np.pi * frequency * time + theta)
 clip = clipper()
 sinewave_t = torch.tensor(sinewave)
 with torch.no_grad():
-    clip.bias[0] = torch.tensor(0.9)
-    #clip.bias[1] = torch.tensor(10)
+    clip.weight[0] = torch.tensor(0.9)
+    clip.weight[1] = torch.tensor(10)
+    clip.bias[0] = torch.tensor(0)
     clip_out_t = clip(sinewave_t)
 clip_out1 = clip_out_t.cpu().data.numpy()
 
