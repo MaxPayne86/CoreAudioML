@@ -187,8 +187,7 @@ class AsymmetricAdvancedClip(nn.Module):
     def __init__(self, size_in=1, size_out=1):
         super().__init__()
         self.size_in, self.size_out = size_in, size_out
-        bias = torch.Tensor(2)
-        self.bias = nn.Parameter(bias)
+        self.bias = nn.Parameter(torch.empty(2, **factory_kwargs))
         self.tau_min = 0.1
         self.tau_max = 0.9
 
