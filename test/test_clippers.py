@@ -1,10 +1,13 @@
 import numpy as np
 import matplotlib.pyplot as plot
 import torch
-#from CoreAudioML.networks import AsymmetricAdvancedClip as clipper
-#from CoreAudioML.networks import AdvancedClip as clipper
-#from CoreAudioML.networks import StandardCubicClip as clipper
-from CoreAudioML.networks import AsymmetricStandardCubicClip as clipper
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
+#from CoreAudioML.ddsp import AsymmetricAdvancedClip as clipper
+#from CoreAudioML.ddsp import AdvancedClip as clipper
+#from CoreAudioML.ddsp import StandardCubicClip as clipper
+from CoreAudioML.ddsp import AsymmetricStandardCubicClip as clipper
 
 # threshold 0.1 - 0.9
 def advanced_clip(samples, threshold):
