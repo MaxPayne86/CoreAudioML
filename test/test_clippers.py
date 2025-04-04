@@ -66,8 +66,7 @@ clip = clipper()
 sinewave_t = torch.tensor(sinewave)
 with torch.no_grad():
     clip.bias[0] = torch.tensor(0.9)
-    clip.bias[1] = torch.tensor(10)
-    #clip.bias[0] = torch.tensor(0.5)
+    #clip.bias[1] = torch.tensor(10)
     clip_out_t = clip(sinewave_t)
 clip_out1 = clip_out_t.cpu().data.numpy()
 
