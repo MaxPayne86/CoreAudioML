@@ -10,7 +10,7 @@
 import torch
 from torch import nn, Tensor
 from torch.autograd import Function
-from torch.cuda.amp.autocast_mode import custom_fwd, custom_bwd
+from torch.autograd.function import custom_fwd, custom_bwd
 
 
 class DifferentiableClamp(Function):
@@ -228,38 +228,52 @@ class AdvancedClip(nn.Module):
     """
     A simple advanced clip unit (tanh)
 
-    DO NOT USE WIP: https://ez.analog.com/dsp/sigmadsp/f/q-a/570452/asymmetricsoftclipper-and-advancedclip-formulas-are-simply-wrong
-
-    Reference: https://wiki.analog.com/resources/tools-software/sigmastudio/toolbox/nonlinearprocessors/advancedclip
+    Reference:
+    - https://wiki.analog.com/resources/tools-software/sigmastudio/toolbox/nonlinearprocessors/advancedclip
+    - https://ez.analog.com/dsp/sigmadsp/f/q-a/570452/asymmetricsoftclipper-and-advancedclip-formulas-are-simply-wrong
 
     Implemented by Massimo Pennazio Aida DSP maxipenna@libero.it 2023 All Rights Reserved
 
-    0.1 <= threshold <= 0.9
+    If abs(input) <= threshold:
+        output = input
+    Else:
+        If input > 0:
+            output = threshold * (1 + tanh(theta))
+        Else:
+            output = -threshold * (1 + tanh(theta))
 
-    theta = (abs(In) - threshold) / (1 - threshold)
-    if In < threshold:
-       Out = In
-     else
-       Out = (In * threshold + (1 - threshold) * tanh(theta))
-
+    theta = (abs(input) - threshold) / threshold
     """
     def __init__(self, size_in=1, size_out=1):
         super().__init__()
         self.size_in, self.size_out = size_in, size_out
-        bias = torch.Tensor(1)
-        self.bias = nn.Parameter(bias)
+        self.bias = nn.Parameter(torch.Tensor(1))
         self.thr_min = 0.1
         self.thr_max = 0.9
 
-        nn.init.uniform_(self.bias, self.thr_min, self.thr_max)  # Bias init
+        nn.init.uniform_(self.bias, self.thr_min, self.thr_max)  # Bias initialization
 
     def forward(self, x):
+        # Clamp the threshold to ensure it stays within valid bounds
         thr = self.bias.data.clamp(self.thr_min, self.thr_max)
-        theta = torch.div(torch.sub(torch.abs(x), thr), torch.sub(1, thr))
-        sub_thr = torch.lt(x, thr).type(x.type())
-        sub_thr_out = torch.mul(sub_thr, x)
-        over_thr = torch.ge(x, thr).type(x.type())
-        f_out = torch.add(torch.mul(x, thr), torch.mul(torch.sub(1, thr), torch.tanh(theta)))
-        over_thr_out = torch.mul(over_thr, f_out)
-        out = torch.add(sub_thr_out, over_thr_out)
+
+        # Compute theta
+        theta = torch.div(torch.sub(torch.abs(x), thr), thr)
+
+        # Compute outputs for abs(input) <= threshold
+        within_thr = torch.le(torch.abs(x), thr).type(x.type())
+        within_thr_out = torch.mul(within_thr, x)
+
+        # Compute outputs for abs(input) > threshold
+        over_thr = torch.gt(torch.abs(x), thr).type(x.type())
+        positive = torch.gt(x, 0).type(x.type())
+        negative = torch.le(x, 0).type(x.type())
+
+        positive_out = torch.mul(positive, torch.mul(thr, torch.add(1, torch.tanh(theta))))
+        negative_out = torch.mul(negative, torch.mul(-thr, torch.add(1, torch.tanh(theta))))
+
+        over_thr_out = torch.mul(over_thr, torch.add(positive_out, negative_out))
+
+        # Combine the outputs
+        out = torch.add(within_thr_out, over_thr_out)
         return out
