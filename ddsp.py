@@ -188,9 +188,9 @@ class AsymmetricAdvancedClip(nn.Module):
             Out = -tau2 * (1 + tanh(theta2))
 
     """
-    def __init__(self, size_in=1, size_out=1, device=None, dtype=None):
-        super().__init__()
+    def __init__(self, size_in=1, size_out=1, device=None, dtype=None) -> None:
         factory_kwargs = {'device': device, 'dtype': dtype}
+        super().__init__()
         self.size_in, self.size_out = size_in, size_out
         self.weight = nn.Parameter(torch.empty(2, **factory_kwargs))  # Two thresholds: tau1 and tau2
         self.bias = nn.Parameter(torch.empty(1, **factory_kwargs))  # Single bias
@@ -200,7 +200,7 @@ class AsymmetricAdvancedClip(nn.Module):
         nn.init.uniform_(self.weight, self.tau_min, self.tau_max)  # Initialize tau1 and tau2
         nn.init.zeros_(self.bias)  # Initialize bias to zero
 
-    def forward(self, x):
+    def forward(self, x) -> Tensor:
         # Clamp the thresholds to ensure they stay within valid bounds
         tau = dclamp(self.weight, self.tau_min, self.tau_max)
         tau1, tau2 = tau[0], tau[1]
@@ -257,9 +257,9 @@ class AdvancedClip(nn.Module):
             Out = -threshold * (1 + tanh(theta))
 
     """
-    def __init__(self, size_in=1, size_out=1, device=None, dtype=None):
-        super().__init__()
+    def __init__(self, size_in=1, size_out=1, device=None, dtype=None) -> None:
         factory_kwargs = {'device': device, 'dtype': dtype}
+        super().__init__()
         self.size_in, self.size_out = size_in, size_out
         self.weight = nn.Parameter(torch.empty(1, **factory_kwargs))  # Single threshold
         self.bias = nn.Parameter(torch.empty(1, **factory_kwargs))  # Single bias
@@ -269,7 +269,7 @@ class AdvancedClip(nn.Module):
         nn.init.uniform_(self.weight, self.thr_min, self.thr_max)  # Initialize threshold
         nn.init.zeros_(self.bias)  # Initialize bias to zero
 
-    def forward(self, x):
+    def forward(self, x) -> Tensor:
         # Clamp the threshold to ensure it stays within valid bounds
         thr = dclamp(self.weight, self.thr_min, self.thr_max)
 
