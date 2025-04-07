@@ -234,15 +234,17 @@ class AdvancedClip(nn.Module):
 
     Implemented by Massimo Pennazio Aida DSP maxipenna@libero.it 2023 All Rights Reserved
 
-    If abs(input) <= threshold:
-        output = input
-    Else:
-        If input > 0:
-            output = threshold * (1 + tanh(theta))
-        Else:
-            output = -threshold * (1 + tanh(theta))
+    0.1 <= threshold <= 0.9
+    theta = (abs(In) - threshold) / threshold
 
-    theta = (abs(input) - threshold) / threshold
+    if abs(In) <= threshold:
+        Out = In
+    else:
+        if In > 0:
+            Out = threshold * (1 + tanh(theta))
+        else:
+            Out = -threshold * (1 + tanh(theta))
+
     """
     def __init__(self, size_in=1, size_out=1):
         super().__init__()
