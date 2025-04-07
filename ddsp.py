@@ -188,18 +188,22 @@ class AsymmetricAdvancedClip(nn.Module):
             Out = -tau2 * (1 + tanh(theta2))
 
     """
-    def __init__(self, size_in=1, size_out=1):
+    def __init__(self, size_in=1, size_out=1, device=None, dtype=None):
         super().__init__()
+        factory_kwargs = {'device': device, 'dtype': dtype}
         self.size_in, self.size_out = size_in, size_out
-        self.bias = nn.Parameter(torch.empty(2))  # Two thresholds: tau1 and tau2
+        self.weight = nn.Parameter(torch.empty(2, **factory_kwargs))  # Two thresholds: tau1 and tau2
+        self.bias = nn.Parameter(torch.empty(1, **factory_kwargs))  # Single bias
         self.tau_min = 0.1
         self.tau_max = 0.9
 
-        nn.init.uniform_(self.bias, self.tau_min, self.tau_max)  # Initialize tau1 and tau2
+        nn.init.uniform_(self.weight, self.tau_min, self.tau_max)  # Initialize tau1 and tau2
+        nn.init.zeros_(self.bias)  # Initialize bias to zero
 
     def forward(self, x):
         # Clamp the thresholds to ensure they stay within valid bounds
-        tau1, tau2 = self.bias.data.clamp(self.tau_min, self.tau_max)
+        tau = dclamp(self.weight, self.tau_min, self.tau_max)
+        tau1, tau2 = tau[0], tau[1]
 
         # Pre-calculate theta for all inputs
         abs_x = torch.abs(x)
@@ -224,8 +228,8 @@ class AsymmetricAdvancedClip(nn.Module):
         over_tau2_out = torch.mul(over_tau2, torch.mul(-tau2, torch.add(1, torch.tanh(theta2))))
         negative_out = torch.mul(le_zero, torch.add(within_tau2_out, over_tau2_out))
 
-        # Combine positive and negative outputs
-        out = torch.add(positive_out, negative_out)
+        # Combine positive and negative outputs and add bias
+        out = torch.add(torch.add(positive_out, negative_out), self.bias)
         return out
 
 
@@ -253,18 +257,21 @@ class AdvancedClip(nn.Module):
             Out = -threshold * (1 + tanh(theta))
 
     """
-    def __init__(self, size_in=1, size_out=1):
+    def __init__(self, size_in=1, size_out=1, device=None, dtype=None):
         super().__init__()
+        factory_kwargs = {'device': device, 'dtype': dtype}
         self.size_in, self.size_out = size_in, size_out
-        self.bias = nn.Parameter(torch.Tensor(1))
+        self.weight = nn.Parameter(torch.empty(1, **factory_kwargs))  # Single threshold
+        self.bias = nn.Parameter(torch.empty(1, **factory_kwargs))  # Single bias
         self.thr_min = 0.1
         self.thr_max = 0.9
 
-        nn.init.uniform_(self.bias, self.thr_min, self.thr_max)  # Bias initialization
+        nn.init.uniform_(self.weight, self.thr_min, self.thr_max)  # Initialize threshold
+        nn.init.zeros_(self.bias)  # Initialize bias to zero
 
     def forward(self, x):
         # Clamp the threshold to ensure it stays within valid bounds
-        thr = self.bias.data.clamp(self.thr_min, self.thr_max)
+        thr = dclamp(self.weight, self.thr_min, self.thr_max)
 
         # Compute theta
         theta = torch.div(torch.sub(torch.abs(x), thr), thr)
@@ -283,6 +290,6 @@ class AdvancedClip(nn.Module):
 
         over_thr_out = torch.mul(over_thr, torch.add(positive_out, negative_out))
 
-        # Combine the outputs
-        out = torch.add(within_thr_out, over_thr_out)
+        # Combine the outputs and add bias
+        out = torch.add(torch.add(within_thr_out, over_thr_out), self.bias)
         return out
