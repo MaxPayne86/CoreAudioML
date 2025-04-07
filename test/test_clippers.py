@@ -88,10 +88,11 @@ sinewave = amplitude * np.sin(2 * np.pi * frequency * time + theta)
 sinewave_t = torch.tensor(sinewave)
 
 # Evaluate advanced_clip
-clip = advanced_clipper()
-clip.weight[0] = torch.tensor(0.5)
-clip.bias[0] = torch.tensor(0)
-clip_out_t = clip(sinewave_t)
+with torch.no_grad():
+    clip = advanced_clipper()
+    clip.weight[0] = torch.tensor(0.5)
+    clip.bias[0] = torch.tensor(0)
+    clip_out_t = clip(sinewave_t)
 clip_out_advanced_torch = clip_out_t.cpu().data.numpy()
 clip_out_advanced_numpy = advanced_clip(sinewave, 0.5)
 
@@ -107,10 +108,11 @@ plot.grid(True, which='both')
 plot.savefig('compare_advanced_clipper.png')
 
 # Evaluate standard_cubic
-clip = standard_cubic_clipper()
-clip.weight[0] = torch.tensor(0.5)
-clip.bias[0] = torch.tensor(0)
-clip_out_t = clip(sinewave_t)
+with torch.no_grad():
+    clip = standard_cubic_clipper()
+    clip.weight[0] = torch.tensor(0.5)
+    clip.bias[0] = torch.tensor(0)
+    clip_out_t = clip(sinewave_t)
 clip_out_standard_torch = clip_out_t.cpu().data.numpy()
 clip_out_standard_numpy = standard_cubic(sinewave, 0.5)
 
@@ -126,11 +128,12 @@ plot.grid(True, which='both')
 plot.savefig('compare_standard_clipper.png')
 
 # Evaluate asymmetric_standard_cubic
-clip = asymmetric_standard_cubic_clipper()
-clip.weight[0] = torch.tensor(0.9)
-clip.weight[1] = torch.tensor(10)
-clip.bias[0] = torch.tensor(0)
-clip_out_t = clip(sinewave_t)
+with torch.no_grad():
+    clip = asymmetric_standard_cubic_clipper()
+    clip.weight[0] = torch.tensor(0.9)
+    clip.weight[1] = torch.tensor(10)
+    clip.bias[0] = torch.tensor(0)
+    clip_out_t = clip(sinewave_t)
 clip_out_asymmetric_torch = clip_out_t.cpu().data.numpy()
 clip_out_asymmetric_numpy = asymmetric_standard_cubic(sinewave, 0.9, 10)
 
@@ -146,11 +149,12 @@ plot.grid(True, which='both')
 plot.savefig('compare_asymmetric_clipper.png')
 
 # Evaluate asymmetric_advanced_clip
-clip = asymmetric_advanced_clipper()
-clip.weight[0] = torch.tensor(0.5)
-clip.weight[1] = torch.tensor(0.9)
-clip.bias[0] = torch.tensor(0)
-clip_out_t = clip(sinewave_t)
+with torch.no_grad():
+    clip = asymmetric_advanced_clipper()
+    clip.weight[0] = torch.tensor(0.5)
+    clip.weight[1] = torch.tensor(0.9)
+    clip.bias[0] = torch.tensor(0)
+    clip_out_t = clip(sinewave_t)
 clip_out_asymmetric_advanced_torch = clip_out_t.cpu().data.numpy()
 clip_out_asymmetric_advanced_numpy = asymmetric_advanced_clip(sinewave, 0.5, 0.9)
 
