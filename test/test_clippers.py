@@ -13,12 +13,15 @@ from CoreAudioML.ddsp import AsymmetricStandardCubicClip as clipper
 def advanced_clip(samples, threshold):
     out = []
     for In in samples:
-        theta = (np.abs(In) - threshold) / (1 - threshold)
-        if np.abs(In) >= threshold:
-            out_ = ((In * threshold + (1 - threshold)) * np.tanh(theta))
-            out.append(out_)
-        else:
+        if np.abs(In) <= threshold:
             out.append(In)
+        else:
+            theta = (np.abs(In) - threshold) / threshold
+            if In > 0:
+                out_ = threshold * (1 + np.tanh(theta))
+            else:
+                out_ = -threshold * (1 + np.tanh(theta))
+            out.append(out_)
     return np.array(out)
 
 # alpha 0.1 - 10
