@@ -10,7 +10,7 @@
 import torch
 from torch import nn, Tensor
 from torch.autograd import Function
-from torch.autograd.function import custom_fwd, custom_bwd
+from torch.cuda.amp import custom_bwd, custom_fwd
 
 
 class DifferentiableClamp(Function):
