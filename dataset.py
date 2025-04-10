@@ -6,7 +6,7 @@ import warnings
 import os
 
 
-# Function converting np read audio to range of -1 to +1
+# Function converting raw np data from wavfile.read to np float32 range of -1 to +1
 def audio_converter(audio):
     if audio.dtype == 'int16':
         return audio.astype(np.float32, order='C') / 32768.0
